@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Barbearia — Gestão</title>
+<style>
+:root{--primary:#000;--primary-2:#111;--bg:#f4f4f4;--card:#fff;--text:#0a0a0a;--muted:#666;--border:#d9d9d9;--danger:#b42318}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg)}
+body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);font-size:15px}
+header{min-height:74px;background:#000;border-bottom:1px solid #000;display:flex;align-items:center;justify-content:space-between;padding:10px 28px;position:sticky;top:0;z-index:10}
+.logo{display:flex;align-items:center;gap:14px;height:52px}.logo img{width:205px;max-height:46px;object-fit:contain;display:block}.logo span{display:none}
+nav{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.navbtn{border:1px solid #333;background:#000;padding:10px 12px;border-radius:9px;cursor:pointer;color:#fff;font-weight:600}.navbtn:hover,.navbtn.active{background:#fff;color:#000}
+main{max-width:1220px;margin:28px auto;padding:0 20px}.page{display:none}.page.active{display:block}
+h1{margin:0 0 5px;font-size:29px;letter-spacing:-.02em}.sub{color:var(--muted);margin-bottom:22px}
+.grid{display:grid;gap:14px}.stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:18px}.cards{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 3px 14px #0000000b}
+.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.value{font-size:26px;font-weight:800;margin-top:6px}.small{font-size:13px;color:var(--muted)}
+.toolbar{display:flex;gap:10px;justify-content:space-between;align-items:center;margin:14px 0;flex-wrap:wrap}
+button,.btn{border:1px solid #cfcfcf;background:#fff;color:#000;padding:11px 15px;border-radius:10px;cursor:pointer;font-weight:700;min-height:42px}button:active{transform:scale(.98)}.primary{background:#000;color:#fff;border-color:#000}.danger{color:var(--danger)}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}th,td{text-align:left;padding:12px;border-bottom:1px solid var(--border);font-size:14px}th{color:var(--muted);font-size:12px;text-transform:uppercase}tr:last-child td{border-bottom:0}
+input,select{padding:12px;border:1px solid #cfcfcf;border-radius:10px;background:#fff;width:100%;font-size:16px;min-height:44px;color:#000}label{font-size:12px;color:var(--muted);display:block;margin:10px 0 5px}.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#eee;color:#111;font-size:12px;font-weight:800}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.bar{display:flex;justify-content:space-between;gap:12px;align-items:center}.money{font-weight:800}
+.modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;padding:20px;z-index:20}.modal.open{display:flex}.modalbox{background:#fff;border-radius:18px;padding:22px;max-width:620px;width:100%;max-height:90vh;overflow:auto}.modalhead{display:flex;justify-content:space-between;align-items:center}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:30px}
+.ipad-page{max-width:1120px;margin:0 auto}
+.ipad-page h1{font-size:32px}
+.ipad-page .cards{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.ipad-page .cards button.card{min-height:105px;text-align:left;font-size:17px;padding:20px}
+.ipad-page .cards button.card:active{background:#f0f0f0}
+.ipad-page .select-card.selected{background:#000;color:#fff;border-color:#000;box-shadow:0 0 0 3px #0001}
+.ipad-page .select-card.selected .small{color:#fff}
+.ipad-page .tip-pay{min-height:88px;font-size:17px}
+.ipad-page .tip-pay.selected{background:#000;color:#fff;border-color:#000;box-shadow:0 0 0 3px #0001}
+.ipad-page .primary{min-height:56px;font-size:18px}
+.ipad-page .card{border-radius:18px}
+.ipad-page table{font-size:15px}
+.ipad-page th,.ipad-page td{padding:13px}
+body.ipad-mode{background:#f2f2f2}
+body.ipad-mode header{position:relative;min-height:88px;padding:14px 28px}
+body.ipad-mode header .logo img{width:235px;max-height:58px}
+body.ipad-mode header nav{display:none}
+body.ipad-mode main{max-width:1180px;margin:24px auto;padding:0 22px}
+body.ipad-mode .ipad-page{display:block}
+body.ipad-mode .ipad-page h1{font-size:34px}
+@media (pointer:coarse){
+  button,.btn{min-height:52px;padding:13px 18px}
+  input,select{min-height:50px;font-size:17px}
+  .ipad-page .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  .ipad-page .cards button.card{min-height:120px;font-size:18px}
+  .ipad-page .card{padding:20px}
+}
+@media(max-width:800px){
+  header{height:auto;padding:12px 14px;align-items:center;gap:10px;flex-direction:column}
+  .logo img{width:190px}.navbtn{padding:8px 10px}main{margin:20px auto;padding:0 14px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .ipad-page .cards{grid-template-columns:1fr 1fr}
+}
+@media(max-width:560px){
+  .ipad-page .cards{grid-template-columns:1fr}
+  .ipad-page .bar{align-items:flex-start;flex-direction:column}
+  table{display:block;overflow-x:auto;white-space:nowrap}
+}
+.qty-btn{width:42px;height:42px;border:2px solid currentColor;background:transparent;color:inherit;border-radius:10px;font-size:26px;font-weight:800;line-height:1;cursor:pointer;touch-action:manipulation}.qty-btn:active{transform:scale(.96)}.select-card.selected .qty-btn{background:#fff;color:#000;border-color:#fff}.select-card.selected .qty-btn:hover{background:#eee}</style>
+</head>
+<body>
+<header>
+  <div class="logo"><img src="elevate-logo-white.png" alt="Elevate Barber Shop"><div id="brand" style="display:none">Elevate Barbershop</div></div>
+  <nav id="nav"></nav>
+</header>
+<main>
+<section id="dashboard" class="page active">
+<h1>Dashboard</h1><div class="sub">Gestão da Elevate Barber Shop</div>
+<div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap">
+<div><strong>💈 Lançamentos dos Barbeiros</strong><div class="small">Abra esta tela no iPad para os barbeiros registrarem serviços e produtos.</div></div>
+<button class="primary" onclick="openBarberPage()">Abrir Área dos Barbeiros →</button>
+</div>
+<div id="stockAlert" style="margin-bottom:18px"></div><div class="grid stats" id="stats"></div>
+<div class="grid cards" id="barberCards"></div>
+</section>
+
+<section id="revenue" class="page">
+<h1>Faturamento</h1>
+<div class="sub">Consulte o faturamento de dias, semanas e meses anteriores.</div>
+<div class="card" style="margin:18px 0">
+  <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+    <button onclick="setRevenuePeriod('today')">Hoje</button>
+    <button onclick="setRevenuePeriod('yesterday')">Ontem</button>
+    <button onclick="setRevenuePeriod('week')">Esta semana</button>
+    <button onclick="setRevenuePeriod('prevweek')">Semana anterior</button>
+    <button onclick="setRevenuePeriod('month')">Este mês</button>
+    <button onclick="setRevenuePeriod('prevmonth')">Mês anterior</button>
+    <button onclick="setRevenuePeriod('year')">Este ano</button>
+  </div>
+  <div class="grid cards" style="margin-top:14px">
+    <div><label>Data inicial</label><input id="revStart" type="date" onchange="renderRevenueHistory()"></div>
+    <div><label>Data final</label><input id="revEnd" type="date" onchange="renderRevenueHistory()"></div>
+    <div><label>Barbeiro</label><select id="revBarber" onchange="renderRevenueHistory()"><option value="all">Todos os barbeiros</option></select></div>
+  </div>
+</div>
+<div id="revenueHistorySummary" class="grid stats"></div>
+<div id="revenueBarberDetails" style="margin-top:16px"></div>
+<div id="revenueHistory" style="margin-top:16px"></div>
+</section>
+
+<section id="team" class="page"><h1>Equipe</h1><div class="sub">Catálogo inicial da Elevate: Lucas Carvalho, Igor, Ramon e Elevate Barbershop.</div><div class="sub">Barbeiros, horários e comissões</div>
+<div class="toolbar"><div></div><button class="primary" onclick="openBarber()">+ Adicionar barbeiro</button></div>
+<div class="grid cards" id="teamList"></div></section>
+
+<section id="services" class="page"><h1>Serviços</h1><div class="sub">Catálogo inicial com os serviços e preços já cadastrados no protótipo.</div><div class="sub">Preços e duração editáveis</div>
+<div class="toolbar"><div></div><button class="primary" onclick="openService()">+ Novo serviço</button></div>
+<div class="grid cards" id="serviceList"></div></section>
+
+<section id="products" class="page"><h1>Produtos</h1><div class="sub">Estoque, custo, venda e movimentações</div>
+<div class="toolbar"><div><button onclick="requestStockNotifications()">🔔 Ativar aviso de estoque</button></div><button class="primary" onclick="openProduct()">+ Novo produto</button></div>
+<table><thead><tr><th>Produto</th><th>Estoque</th><th>Custo</th><th>Venda</th><th>Comissão por venda</th><th>Status</th><th></th></tr></thead><tbody id="productList"></tbody></table></section>
+
+<section id="cash" class="page"><h1>Caixa / Lançamentos</h1><div class="sub">Registros por barbeiro, pagamento e gorjeta</div>
+<div class="toolbar"><div><button onclick="filterCash('today')">Hoje</button> <button onclick="filterCash('all')">Todos</button></div><button class="primary" onclick="openEntry()">+ Novo lançamento</button></div>
+<div class="grid stats" id="cashStats"></div>
+<table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
+
+<section id="commissions" class="page"><h1>Comissões</h1><div class="sub">Fechamento por barbeiro</div>
+<div class="card"><div class="toolbar"><div><strong>Período</strong></div><div><input id="commFrom" type="date" style="width:150px" onchange="renderCommissions()"> <input id="commTo" type="date" style="width:150px" onchange="renderCommissions()"></div></div>
+<div class="grid stats" style="margin:12px 0"><div class="card"><div class="small">Total de comissões</div><div class="value" id="commTotalValue">€0.00</div><div class="small">Serviços + produtos · sem Elevate Barbershop</div></div></div>
+<table><thead><tr><th>Barbeiro</th><th>Lançamentos</th><th>Serviços</th><th>Produtos</th><th>Caixinhas</th><th>Comissão serviços</th><th>Comissão produtos</th><th>Total comissão</th></tr></thead><tbody id="commList"></tbody></table></div></section>
+
+<section id="ipad" class="page ipad-page">
+<h1>Área dos Barbeiros</h1>
+<div class="sub">Tela simplificada para usar no iPad da barbearia</div>
+<div id="ipadStep1">
+  <div class="card" style="max-width:850px;margin:auto">
+    <h2 style="margin-top:0">Quem está fazendo o lançamento?</h2>
+    <p class="small">Escolha o barbeiro para começar. Esta área não mostra o painel administrativo.</p>
+    <div class="grid cards" id="ipadBarbers"></div>
+  </div>
+</div>
+<div id="ipadStep2" style="display:none">
+  <div class="card" style="max-width:850px;margin:auto">
+    <div class="bar"><div><div class="label">Barbeiro</div><h2 id="ipadBarberName" style="margin:5px 0"></h2></div><div class="actions"><button onclick="ipadTodayEntries.scrollIntoView({behavior:'smooth'})">📋 Ver lançamentos de hoje</button><button onclick="ipadBack()">← Trocar barbeiro</button></div></div>
+    <hr style="border:0;border-top:1px solid var(--border);margin:16px 0">
+    <h3>1. Serviços <span class="small">— toque novamente para aumentar a quantidade</span></h3>
+    <div class="grid cards" id="ipadServices"></div>
+    <h3 style="margin-top:24px">2. Clientes <span class="small">— escolha quantos clientes este lançamento representa</span></h3>
+    <div class="grid cards" id="ipadClients"></div>
+    <div class="small" style="margin-top:8px">Exemplo: 2 serviços para 1 pessoa = <b>1 cliente</b>. 2 serviços para 2 pessoas = <b>2 clientes</b>.</div>
+    <h3 style="margin-top:24px">3. Produtos <span class="small">— toque novamente para aumentar a quantidade</span></h3>
+    <div class="grid cards" id="ipadProducts"></div>
+    <div id="ipadSelected" class="card" style="margin-top:18px;background:#f8fbfb"></div>
+    <h3 style="margin-top:24px">4. Pagamento dos serviços <span class="small">— se houver serviço</span></h3>
+    <div class="grid cards">
+      <button id="payServiceCash" onclick="ipadPayment('Cash')" class="btn select-card">💵 Cash</button>
+      <button id="payServiceRevolut" onclick="ipadPayment('Revolut')" class="btn select-card">📱 Revolut</button>
+      <button id="payServiceSumUp" onclick="ipadPayment('SumUp')" class="btn select-card">💳 SumUp</button>
+    </div>
+    <h3 style="margin-top:20px">5. Pagamento dos produtos</h3>
+    <div class="grid cards">
+      <button id="payProductCash" onclick="ipadProductPayment('Cash')" class="btn select-card">💵 Cash</button>
+      <button id="payProductRevolut" onclick="ipadProductPayment('Revolut')" class="btn select-card">📱 Revolut</button>
+      <button id="payProductSumUp" onclick="ipadProductPayment('SumUp')" class="btn select-card">💳 SumUp</button>
+    </div>
+    <h3 style="margin-top:20px">6. Gorjeta / Caixinha</h3>
+    <label>Valor da gorjeta (€)</label>
+    <input id="ipadTip" oninput="ipadUpdate()" type="number" step=".01" min="0" value="0" style="max-width:220px;font-size:20px">
+    <div class="small" style="margin:10px 0 8px">Escolha a forma de pagamento da gorjeta:</div>
+    <div class="grid cards">
+      <button type="button" onclick="ipadTipPaymentChoose('Cash')" class="btn tip-pay" id="tipPayCash">💵 Cash</button>
+      <button type="button" onclick="ipadTipPaymentChoose('Revolut')" class="btn tip-pay" id="tipPayRevolut">📱 Revolut</button>
+      <button type="button" onclick="ipadTipPaymentChoose('SumUp')" class="btn tip-pay" id="tipPaySumUp">💳 SumUp</button>
+    </div>
+    <button class="primary" style="width:100%;margin-top:22px;font-size:18px;padding:15px" onclick="ipadSave()">✓ Confirmar lançamento</button>
+  </div>
+</div>
+<div class="card" style="max-width:1100px;margin:22px auto 0">
+  <div class="bar">
+    <div><h2 style="margin:0">Lançamentos de hoje</h2><div class="small">Todos os barbeiros podem consultar o que foi lançado hoje, com horário e forma de pagamento.</div></div>
+    <span class="badge" id="ipadTodayTotal"></span>
+  </div>
+  <div id="ipadTodayEntries" style="margin-top:15px"></div>
+</div>
+</section>
+
+<section id="history" class="page">
+<h1>Histórico dos Barbeiros</h1>
+<div class="sub">Consulte lançamentos passados com o mesmo nível de detalhe do lançamento no iPad.</div>
+<div class="card">
+  <div class="grid cards">
+    <div>
+      <label>Barbeiro</label>
+      <select id="histBarber" onchange="renderHistory()"><option value="all">Todos os barbeiros</option></select>
+    </div>
+    <div>
+      <label>Data</label>
+      <input id="histDate" type="date" onchange="renderHistory()">
+    </div>
+    <div>
+      <label>Forma de pagamento</label>
+      <select id="histPayment" onchange="renderHistory()">
+        <option value="all">Todas</option><option>Cash</option><option>Revolut</option><option>SumUp</option>
+      </select>
+    </div>
+    <div>
+      <label>Pesquisar</label>
+      <input id="histSearch" placeholder="Serviço ou produto..." oninput="renderHistory()">
+    </div>
+  </div>
+</div>
+<div id="historySummary" class="grid stats" style="margin-top:16px"></div>
+<div id="historyList" style="margin-top:16px"></div>
+</section>
+
+<section id="settings" class="page"><h1>Configurações</h1><div class="sub">Tudo editável pelo administrador</div>
+<div class="card"><div class="formgrid"><div><label>Nome da barbearia</label><input id="setName"></div><div><label>Moeda</label><select id="setCurrency"><option>€</option><option>£</option><option>$</option></select></div><div><label>Comissão padrão (%)</label><input id="setCommission" type="number" min="0" max="100"></div><div><label>Abertura</label><input id="setOpen" type="time"></div><div><label>Fechamento</label><input id="setClose" type="time"></div></div><br><button class="primary" onclick="saveSettings()">Salvar configurações</button></div>
+<br><div class="card"><strong>Permissões</strong><p class="small">Administrador: acesso completo, edição/exclusão e fechamento. Barbeiro: registra seus atendimentos e consulta suas próprias comissões.</p></div>
+</section>
+</main>
+<footer>MVP de gestão para barbearia — dados locais protegidos para uso offline. <span id="syncStatus">● Online</span></footer>
+
+<div class="modal" id="modal"><div class="modalbox"><div class="modalhead"><h2 id="modalTitle"></h2><button onclick="closeModal()">✕</button></div><div id="modalBody"></div></div></div>
+
+<script>
+const key='elevate_barbershop_shared_v5';
+const legacyKey='elevate_barbershop_seed_v3';
+const syncKey='elevate_barbershop_pending_sync_v2';
+let pendingSync=JSON.parse(localStorage.getItem(syncKey)||'[]');
+let catalogDirty=localStorage.getItem('elevate_barbershop_catalog_dirty_v1')==='1';
+let db=JSON.parse(localStorage.getItem(key)||localStorage.getItem(legacyKey)||'null')||{
+settings:{name:'Elevate Barbershop',currency:'€',commission:50,open:'10:00',close:'20:00'},
+barbers:[
+{id:1,name:'Lucas Carvalho',commission:50,active:true},
+{id:2,name:'Igor',commission:50,active:true},
+{id:3,name:'Ramon',commission:50,active:true},
+{id:4,name:'Elevate Barbershop',commission:0,active:true}],
+services:[
+['Scalp peeling',30,30],['Skin fade and beard',32,30],['Haircut, Beard, …',52,80],['Kids Haircut Skin Fade',20,30],['Kids Haircut',16,30],['Brazilian Keratin',50,60],['Scissors Cut',27,30],['Haircut Beard …',42,70],['Student School',20,30],['Haircut and Beard Trim',37,60],['Skin Fade',24,30],['Classic Haircut',20,30],['Beard Trim',16,30],['Hot Towel Shave',23,30],['Nose waxing',10,10],['Eyebrowns',5,10],['Combo - offer',30,30],['Line up',10,30],['Scissors student',25,30],['Student College',22,30],['Beard Hydration',20,30],['Hair Hydration',30,30],['Haircut + Hydration',50,30],['Haircut and hot towel',42,60],['ear wax',10,10],['Scissors Cut advanced',45,60],['Beard Pigmentation',15,30]].map((x,i)=>({id:i+1,name:x[0],price:x[1],duration:x[2]})),
+products:[
+{id:1,name:'Matte Red one',stock:0,cost:0,price:0,min:2,commission:0},
+{id:2,name:'Matte Pomade',stock:0,cost:0,price:0,min:2,commission:0},
+{id:3,name:'Numero 7 RED',stock:0,cost:0,price:0,min:2,commission:0},
+{id:4,name:'Sea Salt',stock:0,cost:0,price:0,min:2,commission:0},
+{id:5,name:'Sea Salt - Shave Factory',stock:0,cost:0,price:0,min:2,commission:0},
+{id:6,name:'Bandido Powder',stock:0,cost:0,price:0,min:2,commission:0},
+{id:7,name:'Numero 5 BLUE',stock:0,cost:0,price:0,min:2,commission:0},
+{id:8,name:'Oil Beard',stock:0,cost:0,price:0,min:2,commission:0},
+{id:9,name:'Hair Spray',stock:0,cost:0,price:0,min:2,commission:0},
+{id:10,name:'Hair mousse',stock:0,cost:0,price:0,min:2,commission:0},
+{id:11,name:'Bandido After Shave',stock:0,cost:0,price:0,min:2,commission:0},
+{id:12,name:'Red One After shave',stock:0,cost:0,price:0,min:2,commission:0},
+{id:13,name:'Curl Cream',stock:0,cost:0,price:0,min:2,commission:0}],
+entries:[
+{id:1,date:'2026-10-01',time:'15:05',barber:1,service:'Skin Fade',payment:'SumUp',tip:0,total:24},
+{id:2,date:'2026-10-01',time:'15:00',barber:4,service:'Classic Haircut',payment:'Cash',tip:10,total:20},
+{id:3,date:'2026-10-01',time:'14:57',barber:2,service:'Kids Haircut Skin Fade',payment:'SumUp',tip:3.30,total:20},
+{id:4,date:'2026-10-01',time:'14:53',barber:3,service:'Skin Fade',payment:'SumUp',tip:3.30,total:24},
+{id:5,date:'2026-10-01',time:'14:27',barber:4,service:'Skin Fade',payment:'Revolut',tip:0,total:24},
+{id:6,date:'2026-10-01',time:'14:23',barber:3,service:'Skin Fade',payment:'SumUp',tip:0,total:24},
+{id:7,date:'2026-10-01',time:'13:44',barber:1,service:'Classic Haircut',payment:'SumUp',tip:3,total:20},
+{id:8,date:'2026-10-01',time:'13:37',barber:2,service:'Skin Fade',payment:'SumUp',tip:0,total:24},
+{id:9,date:'2026-10-01',time:'12:51',barber:2,service:'Skin Fade',payment:'Cash',tip:1,total:24},
+{id:10,date:'2026-10-01',time:'12:46',barber:1,service:'Scissors Cut',payment:'SumUp',tip:0,total:27},
+{id:11,date:'2026-10-01',time:'12:04',barber:2,service:'Skin Fade',payment:'SumUp',tip:0,total:24},
+{id:12,date:'2026-10-01',time:'11:51',barber:1,service:'Haircut and Beard Trim',payment:'SumUp',tip:3,total:37}
+]};
+db.products=(db.products||[]).map(p=>({...p,commission:Number(p.commission||0)}));
+// Preserva dados existentes e migra para a chave final sem apagar lançamentos já guardados.
+localStorage.setItem(key,JSON.stringify(db));
+// A Elevate Barbershop representa a própria barbearia: nunca recebe comissão.
+db.barbers=(db.barbers||[]).map(b=>b.name==='Elevate Barbershop'?{...b,commission:0}:b);
+function isShopBarber(b){return !!b && (b.id===4 || b.name==='Elevate Barbershop');}
+function barberServiceCommissionRate(b){return isShopBarber(b)?0:Number(b?.commission||0);}
+
+let remoteLoaded=false;
+function persistSyncState(){
+  localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+  localStorage.setItem('elevate_barbershop_catalog_dirty_v1',catalogDirty?'1':'0');
+}
+function markCatalogDirty(){catalogDirty=true;persistSyncState();}
+async function syncRemoteNow(){
+ if(!navigator.onLine) { updateConnectionStatus(); return false; }
+ try{
+   const payload=pendingSync.map(id=>db.entries.find(e=>String(e.id)===String(id))).filter(Boolean);
+   const body={entries:payload};
+   if(catalogDirty) body.catalog={settings:db.settings,barbers:db.barbers,services:db.services,products:db.products};
+   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   if(!r.ok) throw new Error('sync');
+   const out=await r.json();
+   if(!out.ok || !out.db) throw new Error(out.error||'sync');
+   const localPendingIds=new Set(pendingSync.map(String));
+   const pendingLocal=(db.entries||[]).filter(e=>localPendingIds.has(String(e.id)));
+   const remote=out.db;
+   db={...remote};
+   const byId=new Map((db.entries||[]).map(e=>[String(e.id),e]));
+   pendingLocal.forEach(e=>byId.set(String(e.id),e));
+   db.entries=[...byId.values()].sort((a,b)=>String(b.date+b.time).localeCompare(String(a.date+a.time)));
+   pendingSync=[];
+   catalogDirty=false;
+   persistSyncState();
+   localStorage.setItem(key,JSON.stringify(db));
+   updateConnectionStatus(); render(); return true;
+ }catch(e){ updateConnectionStatus(); return false; }
+}
+function save(opts={}){
+ localStorage.setItem(key,JSON.stringify(db));
+ if(opts.catalog) markCatalogDirty();
+ persistSyncState();
+ render();updateConnectionStatus();
+ if(navigator.onLine)syncRemoteNow();
+}
+function queueSync(entry){if(!pendingSync.includes(entry.id))pendingSync.push(entry.id);persistSyncState();}
+async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
+async function loadRemote(){
+ if(!navigator.onLine) { updateConnectionStatus(); return; }
+ try{
+   const r=await fetch('/api/data',{cache:'no-store'}); if(!r.ok) throw new Error('data');
+   const remote=await r.json();
+   const localPendingIds=new Set(pendingSync.map(String));
+   const pendingLocal=(db.entries||[]).filter(e=>localPendingIds.has(String(e.id)));
+   const localCatalog=catalogDirty?{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}:null;
+   db=remote;
+   if(localCatalog) Object.assign(db,localCatalog);
+   const byId=new Map((db.entries||[]).map(e=>[String(e.id),e]));
+   pendingLocal.forEach(e=>byId.set(String(e.id),e));
+   db.entries=[...byId.values()].sort((a,b)=>String(b.date+b.time).localeCompare(String(a.date+a.time)));
+   remoteLoaded=true;
+   localStorage.setItem(key,JSON.stringify(db));
+   render(); updateConnectionStatus();
+   if(pendingLocal.length || catalogDirty) await syncRemoteNow();
+ }catch(e){updateConnectionStatus();}
+}
+function updateConnectionStatus(){const el=document.getElementById('syncStatus');if(!el)return;el.textContent=navigator.onLine?(pendingSync.length||catalogDirty?'● Online · sincronização pendente':'● Online · sincronizado'):'● Offline · dados guardados neste dispositivo';el.style.fontWeight='700';}
+window.addEventListener('online',()=>{updateConnectionStatus();loadRemote()});window.addEventListener('offline',updateConnectionStatus);
+function money(n){return db.settings.currency+Number(n).toFixed(2)}
+function barberName(id){return db.barbers.find(x=>x.id==id)?.name||'—'}
+function serviceObj(name){return db.services.find(x=>x.name===name)}
+function navInit(){let items=[['dashboard','Dashboard'],['revenue','Faturamento'],['team','Equipe'],['services','Serviços'],['products','Produtos'],['cash','Caixa'],['commissions','Comissões'],['history','Histórico'],['ipad','Área dos Barbeiros'],['settings','Configurações']];nav.innerHTML=items.map(x=>x[0]==='ipad'?`<button class="navbtn" onclick="openBarberPage()">${x[1]}</button>`:`<button class="navbtn" onclick="show('${x[0]}')">${x[1]}</button>`).join('')}
+function initHistory(){
+  const sel=document.getElementById('histBarber');
+  if(!sel) return;
+  const current=sel.value||'all';
+  sel.innerHTML='<option value="all">Todos os barbeiros</option>'+db.barbers.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  sel.value=current;
+  const d=document.getElementById('histDate');
+  if(d && !d.value) d.value=new Date().toISOString().slice(0,10);
+}
+function dateOnly(d){return d.toISOString().slice(0,10)}
+function startOfWeek(d){let x=new Date(d);let day=x.getDay();let diff=day===0?-6:1-day;x.setDate(x.getDate()+diff);x.setHours(0,0,0,0);return x}
+function setRevenuePeriod(type){
+  const now=new Date(); let s=new Date(now), e=new Date(now);
+  if(type==='today'){}
+  if(type==='yesterday'){s.setDate(s.getDate()-1);e=new Date(s)}
+  if(type==='week'){s=startOfWeek(now)}
+  if(type==='prevweek'){e=startOfWeek(now);e.setDate(e.getDate()-1);s=new Date(e);s.setDate(s.getDate()-6)}
+  if(type==='month'){s=new Date(now.getFullYear(),now.getMonth(),1);e=new Date(now)}
+  if(type==='prevmonth'){s=new Date(now.getFullYear(),now.getMonth()-1,1);e=new Date(now.getFullYear(),now.getMonth(),0)}
+  if(type==='year'){s=new Date(now.getFullYear(),0,1);e=new Date(now)}
+  revStart.value=dateOnly(s);revEnd.value=dateOnly(e);renderRevenueHistory();
+}
+function initRevenueBarberFilter(){
+  const sel=document.getElementById('revBarber');
+  if(!sel) return;
+  const current=sel.value||'all';
+  sel.innerHTML='<option value="all">Todos os barbeiros</option>'+db.barbers.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  sel.value=current;
+}
+function renderRevenueHistory(){
+  initRevenueBarberFilter();
+  const s=revStart?.value, e=revEnd?.value;
+  if(!s||!e||!revenueHistory)return;
+  const selectedBarber=revBarber?.value||'all';
+  const es=db.entries.filter(x=>x.date>=s&&x.date<=e&&(selectedBarber==='all'||String(x.barber)===String(selectedBarber)));
+  const services=es.reduce((a,x)=>a+Number(x.total||0)-Number(x.productPrice||0),0);
+  const products=es.reduce((a,x)=>a+Number(x.productPrice||0),0);
+  const tips=es.reduce((a,x)=>a+Number(x.tip||0),0);
+  const total=services+products;
+  revenueHistorySummary.innerHTML=[
+    ['Faturamento',money(total)],['Parte da barbearia',money(es.reduce((a,x)=>{const b=db.barbers.find(bb=>bb.id==x.barber);return a+entryServiceTotal(x)+entryProductTotal(x)-entryServiceTotal(x)*barberServiceCommissionRate(b)/100-entryProductCommission(x)+(isShopBarber(b)?Number(x.tip||0):0)},0))],['Serviços',money(services)],['Produtos',money(products)],['Serviços vendidos',es.reduce((a,x)=>a+entryServiceQty(x),0)],['Produtos vendidos',es.reduce((a,x)=>a+entryProductQty(x),0)],['Caixinhas',money(tips)],['Clientes',es.reduce((a,x)=>a+entryClients(x),0)],['Lançamentos',es.length]
+  ].map(x=>`<div class="card"><div class="small">${x[0]}</div><div class="value" style="font-size:22px">${x[1]}</div></div>`).join('');
+
+  // Detailed launch list grouped by barber, with the same information recorded on the iPad.
+  const barberGroups=db.barbers.map(b=>[b,es.filter(x=>String(x.barber)===String(b.id))]).filter(x=>x[1].length);
+  revenueBarberDetails.innerHTML=barberGroups.length ? barberGroups.map(([b,list])=>{
+    const st=list.reduce((a,x)=>a+Number(x.total||0)-Number(x.productPrice||0),0);
+    const pt=list.reduce((a,x)=>a+Number(x.productPrice||0),0);
+    const tt=list.reduce((a,x)=>a+Number(x.tip||0),0);
+    const sc=st*barberServiceCommissionRate(b)/100;
+    const pc=isShopBarber(b)?0:list.reduce((a,x)=>a+entryProductCommission(x),0);
+    return `<div class="card" style="margin-bottom:18px">
+      <div class="bar">
+        <div><h2 style="margin:0">${b.name}</h2><div class="small">${list.length} lançamento(s) · ${list.reduce((a,x)=>a+entryClients(x),0)} cliente(s) no período</div></div>
+        <div style="text-align:right"><strong>${money(st+pt)}</strong><div class="small">Comissão: ${money(sc+pc)}</div></div>
+      </div>
+      <div class="grid stats" style="margin:12px 0">
+        <div><span class="small">Serviços</span><br><b>${money(st)}</b></div>
+        <div><span class="small">Produtos</span><br><b>${money(pt)}</b></div>
+        <div><span class="small">Caixinhas</span><br><b>${money(tt)}</b></div>
+        <div><span class="small">Comissão produtos</span><br><b>${money(pc)}</b></div>
+      </div>
+      <table><thead><tr>
+        <th>Data</th><th>Hora</th><th>Clientes</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Valor serviço</th><th>Produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th>
+      </tr></thead><tbody>
+      ${list.slice().sort((a,b)=>`${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).map(x=>{
+        const sv=Number(x.total||0)-Number(x.productPrice||0);
+        return `<tr>
+          <td>${x.date||'—'}</td><td><b>${x.time||'—'}</b></td><td>${entryClients(x)}</td><td>${x.service||'—'}</td>
+          <td>${x.productName||'—'}</td><td>${x.payment||'—'}</td><td>${money(sv)}</td>
+          <td>${money(x.productPrice||0)}</td><td>${money(x.tip||0)}</td><td>${x.tip?(x.tipPayment||'Cash'):'—'}</td>
+          <td><b>${money(x.total||0)}</b></td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+    </div>`
+  }).join('') : '<div class="card"><strong>Nenhum lançamento encontrado para este período/barbeiro.</strong></div>';
+
+  const days={};
+  es.forEach(x=>(days[x.date]??=[]).push(x));
+  revenueHistory.innerHTML=Object.entries(days).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,list])=>{
+    const st=list.reduce((a,x)=>a+Number(x.total||0)-Number(x.productPrice||0),0);
+    const pt=list.reduce((a,x)=>a+Number(x.productPrice||0),0);
+    const tt=list.reduce((a,x)=>a+Number(x.tip||0),0);
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="bar"><div><h3 style="margin:0">${date}</h3><div class="small">${list.length} lançamento(s)</div></div><strong>${money(st+pt)}</strong></div>
+      <div class="small" style="margin-top:8px">Serviços ${money(st)} · Produtos ${money(pt)} · Caixinhas ${money(tt)}</div>
+      <div class="small" style="margin-top:6px">Pagamentos: Cash ${money(list.filter(x=>x.payment==='Cash').reduce((a,x)=>a+Number(x.total||0),0))} · Revolut ${money(list.filter(x=>x.payment==='Revolut').reduce((a,x)=>a+Number(x.total||0),0))} · SumUp ${money(list.filter(x=>x.payment==='SumUp').reduce((a,x)=>a+Number(x.total||0),0))}</div>
+    </div>`
+  }).join('')||'<div class="card"><strong>Nenhum faturamento no período.</strong></div>';
+}
+
+function renderHistory(){
+  initHistory();
+  const date=document.getElementById('histDate')?.value||'';
+  const barber=document.getElementById('histBarber')?.value||'all';
+  const payment=document.getElementById('histPayment')?.value||'all';
+  const q=(document.getElementById('histSearch')?.value||'').toLowerCase();
+  let es=db.entries.filter(e=>
+    (!date || e.date===date) &&
+    (barber==='all' || String(e.barber)===String(barber)) &&
+    (payment==='all' || e.payment===payment || e.tipPayment===payment) &&
+    (!q || `${e.service||''} ${e.productName||''} ${barberName(e.barber)}`.toLowerCase().includes(q))
+  ).sort((a,b)=>`${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+  const serviceTotal=es.reduce((s,e)=>s+Number(e.total||0)-entryProductTotal(e),0);
+  const productTotal=es.reduce((s,e)=>s+entryProductTotal(e),0);
+  const tipTotal=es.reduce((s,e)=>s+Number(e.tip||0),0);
+  const grand=serviceTotal+productTotal;
+  historySummary.innerHTML=[
+    ['Lançamentos',es.length],
+    ['Serviços',money(serviceTotal)],
+    ['Produtos',money(productTotal)],
+    ['Serviços vendidos',es.reduce((a,e)=>a+entryServiceQty(e),0)],
+    ['Produtos vendidos',es.reduce((a,e)=>a+entryProductQty(e),0)],
+    ['Caixinhas',money(tipTotal)],
+    ['Total',money(grand)]
+  ].map(x=>`<div class="card"><div class="small">${x[0]}</div><div class="value" style="font-size:22px">${x[1]}</div></div>`).join('');
+  if(!es.length){historyList.innerHTML='<div class="card"><strong>Nenhum lançamento encontrado.</strong><div class="small">Altere a data, barbeiro ou filtros.</div></div>';return}
+  const byBarber={};
+  es.forEach(e=>(byBarber[e.barber]??=[]).push(e));
+  historyList.innerHTML=Object.entries(byBarber).map(([bid,list])=>{
+    const st=list.reduce((s,e)=>s+Number(e.total||0)-entryProductTotal(e),0);
+    const pt=list.reduce((s,e)=>s+entryProductTotal(e),0);
+    const tt=list.reduce((s,e)=>s+Number(e.tip||0),0);
+    return `<div class="card" style="margin-bottom:16px">
+      <div class="bar"><div><h2 style="margin:0">${barberName(bid)}</h2><div class="small">${list.length} lançamento(s)</div></div><strong>${money(st+pt)}</strong></div>
+      <table style="margin-top:14px"><thead><tr>
+        <th>Data</th><th>Hora</th><th>Clientes</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Valor serviço</th><th>Valor produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th>
+      </tr></thead><tbody>${list.map(e=>{
+        const sv=Number(e.total||0)-entryProductTotal(e);
+        return `<tr>
+          <td>${e.date||'—'}</td><td><b>${e.time||'—'}</b></td><td>${e.service||'—'}</td>
+          <td>${e.productName||'—'}</td><td>${e.payment||'—'}</td><td>${money(sv)}</td><td>${money(e.productPrice||0)}</td>
+          <td>${money(e.tip||0)}</td><td>${e.tip?e.tipPayment||'Cash':'—'}</td><td><b>${money(e.total||0)}</b></td>
+        </tr>`}).join('')}</tbody></table>
+      <div class="small" style="margin-top:10px">Serviços: ${money(st)} · Produtos: ${money(pt)} · Caixinhas: ${money(tt)}</div>
+    </div>`
+  }).join('');
+}
+function openBarberPage(){
+  const w=window.open('', '_blank');
+  if(!w){alert('O navegador bloqueou a nova página. Permita pop-ups para este sistema.');return}
+  const barberPage=document.documentElement.outerHTML;
+  w.document.open();
+  w.document.write(barberPage);
+  w.document.close();
+  w.document.title='Elevate Barber Shop — Área dos Barbeiros';
+  w.addEventListener('load',()=>{
+    w.document.body.classList.add('ipad-mode');
+    w.document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+    const page=w.document.getElementById('ipad'); if(page) page.classList.add('active');
+    const nav=w.document.getElementById('nav'); if(nav) nav.style.display='none';
+    const h1=page?.querySelector('h1'); if(h1) h1.textContent='Área dos Barbeiros';
+    const sub=page?.querySelector('.sub'); if(sub) sub.textContent='Lançamentos rápidos • Elevate Barber Shop';
+    if(w.document.getElementById('ipadStep1')) w.document.getElementById('ipadStep1').style.display='block';
+    if(w.document.getElementById('ipadStep2')) w.document.getElementById('ipadStep2').style.display='none';
+    w.renderIpad?.();
+  });
+}
+function show(id){if(id==='ipad'){openBarberPage();return}document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.textContent==={dashboard:'Dashboard',revenue:'Faturamento',team:'Equipe',services:'Serviços',products:'Produtos',cash:'Caixa',commissions:'Comissões',history:'Histórico',ipad:'Área dos Barbeiros',settings:'Configurações'}[id]));render()}
+function renderInfo(){
+  const el=document.getElementById('systemInfo');
+  if(el) el.innerHTML=`<div class="bar"><div><h2 style="margin:0">Elevate Barber Shop — Gestão</h2><div class="small">Serviços, produtos, barbeiros, lançamentos, pagamentos, caixinhas, estoque e comissões.</div></div></div>
+  <div class="grid stats" style="margin-top:12px">
+    <div><span class="small">Barbeiros</span><br><b>${db.barbers.length}</b></div>
+    <div><span class="small">Serviços</span><br><b>${db.services.length}</b></div>
+    <div><span class="small">Produtos</span><br><b>${db.products.length}</b></div>
+    <div><span class="small">Lançamentos</span><br><b>${db.entries.length}</b></div>
+  </div>`;
+}
+function render(){brand.textContent=db.settings.name;renderInfo();renderIpad();renderDashboard();if(document.getElementById('history'))renderHistory();if(document.getElementById('revenueHistory')){if(!revStart.value){setRevenuePeriod('month')}else renderRevenueHistory();}renderTeam();renderServices();renderProducts();renderCash();renderCommissions();renderSettings()}
+function entryQtySum(entries,type){return entries.reduce((a,e)=>a+(type==='service'?entryServiceQty(e):entryProductQty(e)),0)}
+function renderDashboard(){
+renderStockAlert();
+let today=db.entries.filter(e=>e.date==='2026-10-01');let rev=today.reduce((s,e)=>s+entryTotal(e),0),tips=today.reduce((s,e)=>s+Number(e.tip||0),0);
+const serviceRevenueToday=today.reduce((s,e)=>s+entryServiceTotal(e),0);
+  const productRevenueToday=today.reduce((s,e)=>s+entryProductTotal(e),0);
+  const serviceCommissionToday=today.reduce((s,e)=>{const b=db.barbers.find(x=>x.id==e.barber);return s+entryServiceTotal(e)*barberServiceCommissionRate(b)/100},0);
+  const productCommissionToday=today.reduce((s,e)=>s+entryProductCommission(e),0);
+  const shopShareToday=serviceRevenueToday+productRevenueToday-serviceCommissionToday-productCommissionToday;
+  const clientsToday=today.reduce((a,e)=>a+entryClients(e),0);
+  const serviceQtyToday=today.reduce((a,e)=>a+entryServiceQty(e),0);
+  const productQtyToday=today.reduce((a,e)=>a+entryProductQty(e),0);
+  stats.innerHTML=[['Faturamento hoje',money(rev)],['Parte da barbearia',money(shopShareToday)],['Gorjetas',money(tips)],['Clientes hoje',clientsToday],['Serviços vendidos hoje',serviceQtyToday],['Produtos vendidos hoje',productQtyToday],['Barbeiros',db.barbers.length],['Cash',money(today.filter(e=>e.payment==='Cash').reduce((s,e)=>s+entryTotal(e),0))],['Revolut',money(today.filter(e=>e.payment==='Revolut').reduce((s,e)=>s+entryTotal(e),0))],['SumUp',money(today.filter(e=>e.payment==='SumUp').reduce((s,e)=>s+entryTotal(e),0))]].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');
+barberCards.innerHTML=db.barbers.map(b=>{let es=today.filter(e=>e.barber==b.id),r=es.reduce((s,e)=>s+entryTotal(e),0),t=es.reduce((s,e)=>s+Number(e.tip||0),0),serviceRevenue=es.reduce((s,e)=>s+entryServiceTotal(e),0),serviceComm=serviceRevenue*barberServiceCommissionRate(b)/100,productSales=es.reduce((s,e)=>s+entryProductTotal(e),0),productComm=es.reduce((s,e)=>s+entryProductCommission(e),0),totalComm=serviceComm+productComm,shopShare=serviceRevenue+productSales-totalComm+(isShopBarber(b)?t:0);return `<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small"><b>Lançamentos:</b> ${es.length} · <b>Clientes:</b> ${es.reduce((a,e)=>a+entryClients(e),0)}</p><p class="small"><b>Serviços vendidos:</b> ${entryQtySum(es,'service')}</p><p class="small"><b>Produtos vendidos:</b> ${entryQtySum(es,'product')}</p><p class="small"><b>Valor serviços:</b> ${money(serviceRevenue)} · <b>Valor produtos:</b> ${money(productSales)}</p><p class="small"><b>Caixinhas:</b> ${money(t)}</p><div class="value">${money(r+t)}</div><p class="small">Comissão serviços: <b>${money(serviceComm)}</b> · Comissão produtos: <b>${money(productComm)}</b></p><p class="small">Total comissão: <b>${money(totalComm)}</b></p><p class="small"><b>Parte da barbearia:</b> ${money(shopShare)}</p></div>`}).join('')
+}
+function renderTeam(){teamList.innerHTML=db.barbers.map(b=>`<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small">${isShopBarber(b)?'Comissão: 0% — 100% da receita fica para a barbearia':`Comissão: ${b.commission}%`} · ${db.settings.open}–${db.settings.close}</p><div class="actions"><button onclick="openBarber(${b.id})">Editar</button><button class="danger" onclick="delBarber(${b.id})">Excluir</button></div></div>`).join('')}
+function renderServices(){serviceList.innerHTML=db.services.map(s=>`<div class="card"><div class="bar"><strong>${s.name}</strong><span class="money">${money(s.price)}</span></div><p class="small">${s.duration} min</p><div class="actions"><button onclick="openService(${s.id})">Editar</button><button class="danger" onclick="delService(${s.id})">Excluir</button></div></div>`).join('')}
+function lowStockProducts(){return db.products.filter(p=>Number(p.stock||0)<=Number(p.min||0));}
+function renderStockAlert(){
+  const el=document.getElementById('stockAlert'); if(!el)return;
+  const low=lowStockProducts();
+  if(!low.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="card" style="border:2px solid #111;background:#fff7f7">
+    <div class="bar"><div><strong>⚠️ Estoque acabando</strong><div class="small">${low.length} produto(s) atingiram o estoque mínimo.</div></div><button onclick="show('products')">Ver estoque</button></div>
+    <div class="small" style="margin-top:10px">${low.map(p=>`<b>${p.name}</b>: ${p.stock} unidade(s) · mínimo ${p.min}`).join(' &nbsp; · &nbsp; ')}</div>
+  </div>`;
+  if('Notification' in window && Notification.permission==='granted' && low.length) {
+    const key='elevate_stock_notice_'+low.map(p=>p.id+':'+p.stock).join('|');
+    if(sessionStorage.getItem(key)!=='1'){ new Notification('Elevate Barbershop — Estoque baixo',{body:low.map(p=>`${p.name}: ${p.stock} un.`).join(' · ')}); sessionStorage.setItem(key,'1'); }
+  }
+}
+function requestStockNotifications(){
+  if(!('Notification' in window)){alert('Este navegador não oferece notificações. O aviso continuará aparecendo no Dashboard.');return;}
+  Notification.requestPermission().then(r=>{ if(r==='granted') alert('✓ Avisos de estoque ativados neste dispositivo.'); else alert('As notificações foram bloqueadas. O aviso continuará no Dashboard.'); renderStockAlert(); });
+}
+
+function renderProducts(){productList.innerHTML=db.products.map(p=>`<tr><td><b>${p.name}</b></td><td>${p.stock}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td><td>${money(p.commission||0)}</td><td><span class="badge">${p.stock<=p.min?'Estoque baixo':'Normal'}</span></td><td><button onclick="openProduct(${p.id})">Editar</button> <button class="danger" onclick="delProduct(${p.id})">Excluir</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto cadastrado ainda.</td></tr>'}
+function renderCash(){let es=db.entries.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));let rev=es.reduce((s,e)=>s+entryTotal(e),0),tips=es.reduce((s,e)=>s+Number(e.tip||0),0);cashStats.innerHTML=[['Lançamentos',es.length],['Serviços',money(rev)],['Gorjetas',money(tips)]].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');entryList.innerHTML=es.map(e=>`<tr><td>${e.date} ${e.time}</td><td>${barberName(e.barber)}</td><td>${e.service}</td><td>${e.productName||'—'}</td><td>${e.payment}</td><td>${money(e.tip)}</td><td>${e.tipPayment||'—'}</td><td><b>${money(e.total)}</b></td><td><button onclick="openEntry(${e.id})">Editar</button> <button class="danger" onclick="delEntry(${e.id})">Excluir</button></td></tr>`).join('')}
+function renderCommissions(){
+  const from=document.getElementById('commFrom')?.value||'';
+  const to=document.getElementById('commTo')?.value||'';
+  const filtered=db.entries.filter(e=>(!from||e.date>=from)&&(!to||e.date<=to));
+  let map=db.barbers.map(b=>{
+    let es=filtered.filter(e=>e.barber==b.id),serviceRevenue=es.reduce((s,e)=>s+entryServiceTotal(e),0),productRevenue=es.reduce((s,e)=>s+entryProductTotal(e),0),tips=es.reduce((s,e)=>s+Number(e.tip||0),0),sc=serviceRevenue*barberServiceCommissionRate(b)/100,pc=isShopBarber(b)?0:es.reduce((s,e)=>s+entryProductCommission(e),0);
+    return [b,es,serviceRevenue,productRevenue,tips,sc,pc];
+  });
+  const totalCommissions=map.reduce((sum,[b,es,sr,pr,t,sc,pc])=>sum+(isShopBarber(b)?0:sc+pc),0);
+  const totalEl=document.getElementById('commTotalValue');
+  if(totalEl) totalEl.textContent=money(totalCommissions);
+  commList.innerHTML=map.map(([b,es,sr,pr,t,sc,pc])=>`<tr><td>${b.name}</td><td>${es.length}</td><td>${money(sr)}</td><td>${money(pr)}</td><td>${money(t)}</td><td>${money(sc)} (${isShopBarber(b)?'0% — barbearia':b.commission+'%'})</td><td>${money(pc)}</td><td><b>${money(sc+pc)}</b></td></tr>`).join('');
+}
+function renderSettings(){setName.value=db.settings.name;setCurrency.value=db.settings.currency;setCommission.value=db.settings.commission;setOpen.value=db.settings.open;setClose.value=db.settings.close}
+function openModal(title,body){modalTitle.textContent=title;modalBody.innerHTML=body;modal.classList.add('open')}function closeModal(){modal.classList.remove('open')}
+function openBarber(id){let b=db.barbers.find(x=>x.id==id)||{id:null,name:'',commission:db.settings.commission,active:true};let shop=isShopBarber(b);openModal(id?'Editar barbeiro':'Novo barbeiro',`<label>Nome</label><input id="fName" value="${b.name}"><label>Comissão (%)</label><input id="fComm" type="number" value="${shop?0:b.commission}" ${shop?'disabled':''}><p class="small">${shop?'Este perfil é a própria barbearia. Serviços e produtos ficam 100% para a barbearia.':'Comissão dos serviços deste barbeiro.'}</p><label>Status</label><select id="fActive"><option value="1" ${b.active?'selected':''}>Ativo</option><option value="0" ${!b.active?'selected':''}>Inativo</option></select><br><br><button class="primary" onclick="saveBarber(${id||0})">Salvar</button>`)}
+function saveBarber(id){let name=fName.value.trim();let o={id:id||Date.now(),name,commission:name==='Elevate Barbershop'?0:Number(fComm.value),active:fActive.value==='1'};if(!o.name)return alert('Informe o nome');let i=db.barbers.findIndex(x=>x.id==id);if(i>=0)db.barbers[i]=o;else db.barbers.push(o);closeModal();save({catalog:true})}
+function delBarber(id){if(confirm('Excluir barbeiro?')){db.barbers=db.barbers.filter(x=>x.id!=id);save({catalog:true})}}
+function openService(id){let s=db.services.find(x=>x.id==id)||{id:null,name:'',price:0,duration:30};openModal(id?'Editar serviço':'Novo serviço',`<label>Nome</label><input id="fName" value="${s.name}"><label>Preço</label><input id="fPrice" type="number" step=".01" value="${s.price}"><label>Duração (min)</label><input id="fDur" type="number" value="${s.duration}"><br><br><button class="primary" onclick="saveService(${id||0})">Salvar</button>`)}
+function saveService(id){let o={id:id||Date.now(),name:fName.value.trim(),price:Number(fPrice.value),duration:Number(fDur.value)};let i=db.services.findIndex(x=>x.id==id);if(i>=0)db.services[i]=o;else db.services.push(o);closeModal();save({catalog:true})}
+function delService(id){if(confirm('Excluir serviço?')){db.services=db.services.filter(x=>x.id!=id);save({catalog:true})}}
+function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',stock:0,cost:0,price:0,min:2,commission:0};openModal(id?'Editar produto':'Novo produto',`<div class="formgrid"><div><label>Produto</label><input id="fName" value="${p.name}"></div><div><label>Estoque</label><input id="fStock" type="number" value="${p.stock}"></div><div><label>Custo</label><input id="fCost" type="number" step=".01" value="${p.cost}"></div><div><label>Preço de venda</label><input id="fPrice" type="number" step=".01" value="${p.price}"></div><div><label>Comissão do barbeiro por unidade (€)</label><input id="fProdComm" type="number" min="0" step=".01" value="${p.commission||0}"></div><div><label>Estoque mínimo</label><input id="fMin" type="number" value="${p.min}"></div></div><br><button class="primary" onclick="saveProduct(${id||0})">Salvar</button>`)}
+function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save({catalog:true})}
+function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save({catalog:true})}}
+function openEntry(id){let e=db.entries.find(x=>x.id==id)||{id:null,date:'2026-10-01',time:new Date().toTimeString().slice(0,5),barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',payment:'Cash',tip:0,total:0};openModal(id?'Editar lançamento':'Novo lançamento',`<div class="formgrid"><div><label>Data</label><input id="fDate" type="date" value="${e.date}"></div><div><label>Hora</label><input id="fTime" type="time" value="${e.time}"></div><div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div><div><label>Serviço</label><select id="fService">${db.services.map(s=>`<option ${s.name===e.service?'selected':''}>${s.name}</option>`).join('')}</select></div><div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===e.payment?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(e.productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div><div><label>Valor</label><input id="fTotal" type="number" step=".01" value="${e.total}"></div><div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${e.tip}"></div><div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div></div><br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`)}
+function saveEntry(id){let o={id:id||crypto.randomUUID(),date:fDate.value,time:fTime.value,barber:Number(fBarber.value),service:fService.value,payment:fPay.value,productId:fProduct.value?Number(fProduct.value):null,productName:fProduct.value?(db.products.find(p=>p.id==Number(fProduct.value))?.name||''):'',productPrice:fProduct.value?Number(db.products.find(p=>p.id==Number(fProduct.value))?.price||0):0,tip:Number(fTip.value),tipPayment:fTipPay.value,total:Number(fTotal.value)};let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);queueSync(o);closeModal();save()}
+function delEntry(id){if(confirm('Excluir lançamento?')){db.entries=db.entries.filter(x=>x.id!=id);save()}}
+function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save({catalog:true});alert('Configurações salvas')}
+function filterCash(type){show('cash');if(type==='today')alert('Filtro de hoje aplicado no MVP. A versão online terá filtros por dia, semana, mês e período personalizado.')}
+
+let ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};
+
+function getServiceItems(e){
+  if(Array.isArray(e.serviceItems)) return e.serviceItems;
+  return e.service ? [{id:(db.services.find(s=>s.name===e.service)?.id||null),name:e.service,qty:1,unitPrice:Number(e.servicePrice||((db.services.find(s=>s.name===e.service)?.price)||0))}] : [];
+}
+function getProductItems(e){
+  if(Array.isArray(e.productItems)) return e.productItems;
+  return e.productId ? [{id:e.productId,name:e.productName||'',qty:1,unitPrice:entryProductTotal(e),commission:Number((db.products.find(p=>p.id==e.productId)?.commission)||0)}] : [];
+}
+function entryServiceTotal(e){return getServiceItems(e).reduce((s,x)=>s+Number(x.qty||1)*Number(x.unitPrice||0),0)}
+function entryProductTotal(e){return getProductItems(e).reduce((s,x)=>s+Number(x.qty||1)*Number(x.unitPrice||0),0)}
+function entryServiceQty(e){return getServiceItems(e).reduce((s,x)=>s+Number(x.qty||1),0)}
+function entryProductQty(e){return getProductItems(e).reduce((s,x)=>s+Number(x.qty||1),0)}
+function entryTotal(e){return entryServiceTotal(e)+entryProductTotal(e)}
+function entryProductCommission(e){const b=db.barbers.find(x=>x.id==e.barber);if(isShopBarber(b))return 0;return getProductItems(e).reduce((s,x)=>s+Number(x.qty||1)*Number(x.commission ?? ((db.products.find(p=>p.id==x.id)?.commission)||0)),0)}
+function paymentTotal(e,type){
+  const st=entryServiceTotal(e), pt=entryProductTotal(e);
+  return (e.servicePayment||e.payment)===type?st:0 + ((e.productPayment||e.productPay)===type?pt:0)
+}
+
+function serviceUnitCountForEntry(e){return getServiceItems(e).reduce((a,x)=>a+Number(x.qty||1),0)}
+function entryClients(e){
+  const serviceCount=serviceUnitCountForEntry(e);
+  if(serviceCount<=0) return 0;
+  const saved=Number(e.clients);
+  return saved>0?saved:serviceCount;
+}
+function renderIpadToday(){
+  const today=new Date().toISOString().slice(0,10);
+  const entries=db.entries.filter(e=>e.date===today || (today!=='2026-10-01' && e.date==='2026-10-01'));
+  const total=entries.reduce((s,e)=>s+entryTotal(e),0), tips=entries.reduce((s,e)=>s+Number(e.tip||0),0), clients=entries.reduce((s,e)=>s+entryClients(e),0);
+  ipadTodayTotal.textContent=`${entries.length} lançamentos · ${clients} clientes · ${money(total)} serviços/produtos · ${money(tips)} caixinhas`;
+  if(!entries.length){ipadTodayEntries.innerHTML='<div class="small">Nenhum lançamento hoje.</div>';return}
+  const grouped=db.barbers.map(b=>[b,entries.filter(e=>e.barber==b.id)]).filter(x=>x[1].length);
+  ipadTodayEntries.innerHTML=grouped.map(([b,es])=>{
+    const serviceTotal=es.reduce((s,e)=>s+entryServiceTotal(e),0), productTotal=es.reduce((s,e)=>s+entryProductTotal(e),0), tipTotal=es.reduce((s,e)=>s+Number(e.tip||0),0);
+    const cashS=es.filter(e=>(e.servicePayment||e.payment)==='Cash').reduce((s,e)=>s+entryServiceTotal(e),0);
+    const revS=es.filter(e=>(e.servicePayment||e.payment)==='Revolut').reduce((s,e)=>s+entryServiceTotal(e),0);
+    const sumS=es.filter(e=>(e.servicePayment||e.payment)==='SumUp').reduce((s,e)=>s+entryServiceTotal(e),0);
+    const cashP=es.filter(e=>e.productPayment==='Cash').reduce((s,e)=>s+entryProductTotal(e),0);
+    const revP=es.filter(e=>e.productPayment==='Revolut').reduce((s,e)=>s+entryProductTotal(e),0);
+    const sumP=es.filter(e=>e.productPayment==='SumUp').reduce((s,e)=>s+entryProductTotal(e),0);
+    return `<div class="card" style="margin-top:12px">
+      <div class="bar"><div><strong>${b.name}</strong><div class="small">${es.length} lançamento(s) · ${es.reduce((a,e)=>a+entryClients(e),0)} cliente(s)</div></div><strong>${money(serviceTotal+productTotal)}</strong></div>
+      <div class="grid stats" style="margin:12px 0 8px">
+        <div><span class="small">Serviços</span><br><b>${money(serviceTotal)}</b></div>
+        <div><span class="small">Produtos</span><br><b>${money(productTotal)}</b></div>
+        <div><span class="small">Caixinhas</span><br><b>${money(tipTotal)}</b></div>
+        <div><span class="small">Pagamentos serviços</span><br><b>Cash ${money(cashS)} · Rev ${money(revS)} · SumUp ${money(sumS)}</b></div>
+        <div><span class="small">Pagamentos produtos</span><br><b>Cash ${money(cashP)} · Rev ${money(revP)} · SumUp ${money(sumP)}</b></div>
+      </div>
+      <table><thead><tr><th>Hora</th><th>Serviços</th><th>Produtos</th><th>Pag. serviços</th><th>Pag. produtos</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th></tr></thead>
+      <tbody>${es.slice().sort((a,b)=>b.time.localeCompare(a.time)).map(e=>{
+        const si=getServiceItems(e).map(x=>`${x.qty||1}× ${x.name} (${money(x.unitPrice)})`).join('<br>')||'—';
+        const pi=getProductItems(e).map(x=>`${x.qty||1}× ${x.name} (${money(x.unitPrice)})`).join('<br>')||'—';
+        return `<tr><td><b>${e.time}</b></td><td>${si}</td><td>${pi}</td><td>${e.servicePayment||e.payment||'—'}</td><td>${e.productPayment||'—'}</td><td>${money(e.tip||0)}</td><td>${e.tip?e.tipPayment||'Cash':'—'}</td><td><b>${money(entryTotal(e))}</b></td></tr>`;
+      }).join('')}</tbody></table>
+    </div>`
+  }).join('');
+}
+function serviceUnitCount(){return Object.values(ipadState.serviceItems||{}).reduce((a,q)=>a+Number(q||0),0)}
+function renderIpadClients(){
+  const el=document.getElementById('ipadClients'); if(!el)return;
+  const max=serviceUnitCount();
+  if(max<=0){
+    ipadState.clients=0;
+    el.innerHTML='<div class="small">Venda somente de produto: não contabiliza cliente.</div>';
+    return;
+  }
+  if((ipadState.clients||1)>max || Number(ipadState.clients||0)<=0) ipadState.clients=1;
+  el.innerHTML=Array.from({length:max},(_,i)=>i+1).map(n=>`<button class="card select-card ${ipadState.clients===n?'selected':''}" style="text-align:left;min-height:78px" onclick="ipadChooseClients(${n})"><strong>${n} ${n===1?'cliente':'clientes'}</strong><div class="small">${n===1?'1 pessoa':'pessoas'}</div></button>`).join('');
+}
+function ipadChooseClients(n){ipadState.clients=Number(n);renderIpadClients();ipadUpdate()}
+function renderIpad(){
+  renderIpadToday();
+  renderIpadClients();
+  ipadBarbers.innerHTML=db.barbers.filter(b=>b.active).map(b=>`<button class="card" style="text-align:left;min-height:100px;font-size:18px" onclick="ipadChooseBarber(${b.id})"><div style="font-size:26px">👤</div><strong>${b.name}</strong><div class="small">Toque para começar</div></button>`).join('');
+  ipadServices.innerHTML=db.services.map(s=>{let q=ipadState.serviceItems[s.id]||0;return `<div class="card select-card ${q?'selected':''}" style="text-align:left;min-height:88px;position:relative;cursor:pointer" onclick="ipadChooseService(${s.id})"><strong>${s.name}</strong><div class="money" style="margin-top:8px">${money(s.price)}</div><div class="small">${s.duration} min ${q?`· <b>Quantidade: ${q}</b>`:''}</div>${q?`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadRemoveService(${s.id})">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadChooseService(${s.id})">+</button></div>`:''}</div>`}).join('');
+  const available=db.products.filter(p=>p.stock>0);
+  ipadProducts.innerHTML=available.length?available.map(p=>{let q=ipadState.productItems[p.id]||0;return `<div class="card select-card ${q?'selected':''}" style="text-align:left;min-height:75px;position:relative;cursor:pointer" onclick="ipadChooseProduct(${p.id})"><strong>${p.name}</strong><div class="small">${money(p.price)} · estoque ${p.stock}${q?` · <b>Quantidade: ${q}</b>`:''}</div>${q?`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadRemoveProduct(${p.id})">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadChooseProduct(${p.id})">+</button></div>`:''}</div>`}).join(''):'<div class="small">Nenhum produto disponível cadastrado.</div>';
+  ipadUpdate();
+}
+function ipadChooseBarber(id){ipadState={barber:id,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null};ipadStep1.style.display='none';ipadStep2.style.display='block';ipadBarberName.textContent=barberName(id);renderIpad()}
+function ipadChooseService(id){ipadState.serviceItems[id]=(ipadState.serviceItems[id]||0)+1;ipadUpdate();renderIpad()}
+function ipadRemoveService(id){const q=Number(ipadState.serviceItems[id]||0);if(q<=1)delete ipadState.serviceItems[id];else ipadState.serviceItems[id]=q-1;renderIpadClients();ipadUpdate();renderIpad()}
+function ipadChooseProduct(id){const p=db.products.find(x=>x.id===id);const current=ipadState.productItems[id]||0;if(p && current<p.stock)ipadState.productItems[id]=current+1;ipadUpdate();renderIpad()}
+function ipadRemoveProduct(id){const q=Number(ipadState.productItems[id]||0);if(q<=1)delete ipadState.productItems[id];else ipadState.productItems[id]=q-1;ipadUpdate();renderIpad()}
+function ipadPayment(x){ipadState.payment=x;ipadUpdate()}
+function ipadProductPayment(x){ipadState.productPayment=x;ipadUpdate()}
+function ipadTipPaymentChoose(x){ipadState.tipPayment=x;ipadUpdate()}
+function ipadUpdate(){
+ if(!ipadSelected)return;
+ ['Cash','Revolut','SumUp'].forEach(x=>{const el=document.getElementById('tipPay'+x);if(el)el.classList.toggle('selected',ipadState.tipPayment===x);});
+ ['Cash','Revolut','SumUp'].forEach(x=>{const el=document.getElementById('payService'+x);if(el)el.classList.toggle('selected',ipadState.payment===x);});
+ ['Cash','Revolut','SumUp'].forEach(x=>{const el=document.getElementById('payProduct'+x);if(el)el.classList.toggle('selected',ipadState.productPayment===x);});
+ const services=Object.entries(ipadState.serviceItems).filter(([,q])=>q>0).map(([id,q])=>{let s=db.services.find(x=>x.id==id);return s?{...s,qty:q}:null}).filter(Boolean);
+ const products=Object.entries(ipadState.productItems).filter(([,q])=>q>0).map(([id,q])=>{let p=db.products.find(x=>x.id==id);return p?{...p,qty:q}:null}).filter(Boolean);
+ const st=services.reduce((a,x)=>a+x.qty*x.price,0),pt=products.reduce((a,x)=>a+x.qty*x.price,0);
+ ipadSelected.innerHTML=`<strong>Resumo do lançamento</strong>
+ <div class="small" style="margin-top:8px"><b>Serviços:</b> ${services.length?services.map(x=>`${x.qty}× ${x.name} — ${money(x.qty*x.price)}`).join(' · '):'Nenhum'}</div>
+ <div class="small"><b>Clientes:</b> ${ipadState.clients||1}</div>
+ <div class="small"><b>Produtos:</b> ${products.length?products.map(x=>`${x.qty}× ${x.name} — ${money(x.qty*x.price)}`).join(' · '):'Nenhum'}</div>
+ <div class="small"><b>Pagamento serviços:</b> ${ipadState.payment||'Escolha'}</div>
+ <div class="small"><b>Pagamento produtos:</b> ${pt?ipadState.productPayment||'Escolha':'Não aplicável'}</div>
+ <div class="small"><b>Caixinha:</b> ${money(Number(ipadTip.value||0))} · ${Number(ipadTip.value||0)?(ipadState.tipPayment||'Escolha'):'Sem gorjeta'}</div>
+ <div class="small"><b>Pagamento caixinha:</b> ${Number(ipadTip.value||0)?(ipadState.tipPayment||'Escolha'):'—'}</div>
+ <div style="margin-top:8px"><b>Total: ${money(st+pt)}</b></div>`;
+}
+function ipadBack(){ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};ipadStep2.style.display='none';ipadStep1.style.display='block';renderIpad()}
+function ipadSave(){
+ const services=Object.entries(ipadState.serviceItems).filter(([,q])=>q>0).map(([id,q])=>{let s=db.services.find(x=>x.id==id);return s?{id:s.id,name:s.name,qty:q,unitPrice:s.price}:null}).filter(Boolean);
+ const products=Object.entries(ipadState.productItems).filter(([,q])=>q>0).map(([id,q])=>{let p=db.products.find(x=>x.id==id);return p?{id:p.id,name:p.name,qty:q,unitPrice:p.price,commission:Number(p.commission||0)}:null}).filter(Boolean);
+ const tip=Number(ipadTip.value||0);
+ if(!ipadState.barber)return alert('Escolha o barbeiro.');
+ if(!services.length&&!products.length)return alert('Selecione pelo menos um serviço ou um produto.');
+ if(services.length&&!ipadState.payment)return alert('Escolha o pagamento dos serviços.');
+ if(products.length&&!ipadState.productPayment)return alert('Escolha o pagamento dos produtos.');
+ if(tip>0&&!ipadState.tipPayment)return alert('Escolha a forma de pagamento da gorjeta.');
+ for(const x of products){const p=db.products.find(p=>p.id===x.id);if(!p||p.stock<x.qty)return alert(`Estoque insuficiente para ${x.name}.`)}
+ const serviceTotal=services.reduce((a,x)=>a+x.qty*x.unitPrice,0), productTotal=products.reduce((a,x)=>a+x.qty*x.unitPrice,0);
+ const serviceNames=services.map(x=>`${x.qty}× ${x.name}`).join(' + ');
+ const productNames=products.map(x=>`${x.qty}× ${x.name}`).join(' + ');
+ db.entries.push({
+   id:crypto.randomUUID(),date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),
+   barber:ipadState.barber,clients:services.length?Number(ipadState.clients||1):0,service:serviceNames,serviceItems:services,productName:productNames,productItems:products,
+   payment:ipadState.payment,servicePayment:ipadState.payment,productPayment:products.length?ipadState.productPayment:null,
+   productId:products.length===1?products[0].id:null,productPrice:productTotal,tip,tipPayment:tip?ipadState.tipPayment:'Cash',
+   total:serviceTotal+productTotal
+ });
+ const savedId=db.entries[db.entries.length-1].id;
+ queueSync({id:savedId});
+ products.forEach(x=>{const p=db.products.find(p=>p.id===x.id);p.stock-=x.qty});
+ const lowAfter=lowStockProducts();
+ if(lowAfter.length){ setTimeout(()=>{ alert('⚠️ Estoque acabando: '+lowAfter.map(p=>`${p.name} (${p.stock} un.)`).join(', ')); renderStockAlert(); },120); }
+ alert(navigator.onLine?'✓ Lançamento registrado com sucesso!':'✓ Lançamento guardado no iPad. Será sincronizado quando a internet voltar.');
+ ipadTip.value=0;
+ ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};
+ ipadStep2.style.display='none';
+ ipadStep1.style.display='block';
+ save();
+ renderIpad();
+}
+
+navInit();render();show('dashboard');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}
+</script>
+</body></html>
