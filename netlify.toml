@@ -1,6 +1,14 @@
 [functions]
   directory = "netlify/functions"
 
+# Public site: if an old Netlify SSO callback URL is still opened,
+# send the visitor back to the application instead of leaving them on a 404.
+[[redirects]]
+  from = "/.netlify/callback"
+  to = "/"
+  status = 302
+  force = true
+
 [[redirects]]
   from = "/api/data"
   to = "/.netlify/functions/data"
@@ -14,4 +22,10 @@
 [[redirects]]
   from = "/api/health"
   to = "/.netlify/functions/health"
+  status = 200
+
+# SPA fallback for any normal application route.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200
