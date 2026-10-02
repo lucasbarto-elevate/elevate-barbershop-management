@@ -1,5 +1,11 @@
-ELEVATE BARBERSHOP — VERSÃO FINAL V4
+ELEVATE BARBERSHOP — VERSÃO CORRIGIDA V3
 
-Esta versão preserva os dados existentes quando possível e usa uma chave de armazenamento versionada para evitar que uma versão anterior vazia substitua os dados iniciais.
+Mantém o sistema online + offline, sincronização por Netlify Functions + Netlify Blobs e a correção da data atual do Dashboard.
 
-Inclui: serviços, produtos, barbeiros, clientes por lançamento, comissões, parte da barbearia, histórico detalhado, cards de seleção, modo offline e aviso de estoque.
+Correções desta versão:
+- service worker versionado para evitar cache antigo;
+- navegação do site não é interceptada por cache durante o acesso online;
+- manifest.json incluído;
+- cache antigo do Elevate é removido automaticamente;
+- sincronização /api/data e /api/sync preservada;
+- não altera o domínio público elevatebarbershop.ie.

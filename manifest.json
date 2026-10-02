@@ -1,0 +1,9 @@
+{
+  "name": "Elevate Barbershop — Gestão",
+  "short_name": "Elevate Gestão",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": []
+}
