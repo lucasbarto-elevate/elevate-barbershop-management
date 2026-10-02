@@ -225,9 +225,8 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <script>
 const key='elevate_barbershop_shared_v5';
 const legacyKey='elevate_barbershop_seed_v3';
-const syncKey='elevate_barbershop_pending_sync_v2';
+const syncKey='elevate_barbershop_pending_sync_v1';
 let pendingSync=JSON.parse(localStorage.getItem(syncKey)||'[]');
-let catalogDirty=localStorage.getItem('elevate_barbershop_catalog_dirty_v1')==='1';
 let db=JSON.parse(localStorage.getItem(key)||localStorage.getItem(legacyKey)||'null')||{
 settings:{name:'Elevate Barbershop',currency:'€',commission:50,open:'10:00',close:'20:00'},
 barbers:[
@@ -274,43 +273,19 @@ function isShopBarber(b){return !!b && (b.id===4 || b.name==='Elevate Barbershop
 function barberServiceCommissionRate(b){return isShopBarber(b)?0:Number(b?.commission||0);}
 
 let remoteLoaded=false;
-function persistSyncState(){
-  localStorage.setItem(syncKey,JSON.stringify(pendingSync));
-  localStorage.setItem('elevate_barbershop_catalog_dirty_v1',catalogDirty?'1':'0');
-}
-function markCatalogDirty(){catalogDirty=true;persistSyncState();}
 async function syncRemoteNow(){
  if(!navigator.onLine) { updateConnectionStatus(); return false; }
  try{
    const payload=pendingSync.map(id=>db.entries.find(e=>String(e.id)===String(id))).filter(Boolean);
-   const body={entries:payload};
-   if(catalogDirty) body.catalog={settings:db.settings,barbers:db.barbers,services:db.services,products:db.products};
-   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:payload,catalog:{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}})});
    if(!r.ok) throw new Error('sync');
    const out=await r.json();
-   if(!out.ok || !out.db) throw new Error(out.error||'sync');
-   const localPendingIds=new Set(pendingSync.map(String));
-   const pendingLocal=(db.entries||[]).filter(e=>localPendingIds.has(String(e.id)));
-   const remote=out.db;
-   db={...remote};
-   const byId=new Map((db.entries||[]).map(e=>[String(e.id),e]));
-   pendingLocal.forEach(e=>byId.set(String(e.id),e));
-   db.entries=[...byId.values()].sort((a,b)=>String(b.date+b.time).localeCompare(String(a.date+a.time)));
-   pendingSync=[];
-   catalogDirty=false;
-   persistSyncState();
-   localStorage.setItem(key,JSON.stringify(db));
-   updateConnectionStatus(); render(); return true;
+   if(out.db){ db=out.db; localStorage.setItem(key,JSON.stringify(db)); }
+   pendingSync=[]; localStorage.setItem(syncKey,'[]'); updateConnectionStatus(); render(); return true;
  }catch(e){ updateConnectionStatus(); return false; }
 }
-function save(opts={}){
- localStorage.setItem(key,JSON.stringify(db));
- if(opts.catalog) markCatalogDirty();
- persistSyncState();
- render();updateConnectionStatus();
- if(navigator.onLine)syncRemoteNow();
-}
-function queueSync(entry){if(!pendingSync.includes(entry.id))pendingSync.push(entry.id);persistSyncState();}
+function save(){localStorage.setItem(key,JSON.stringify(db));localStorage.setItem(syncKey,JSON.stringify(pendingSync));render();updateConnectionStatus();if(navigator.onLine)syncRemoteNow();}
+function queueSync(entry){if(!pendingSync.includes(entry.id))pendingSync.push(entry.id);localStorage.setItem(syncKey,JSON.stringify(pendingSync));}
 async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
 async function loadRemote(){
  if(!navigator.onLine) { updateConnectionStatus(); return; }
@@ -319,20 +294,19 @@ async function loadRemote(){
    const remote=await r.json();
    const localPendingIds=new Set(pendingSync.map(String));
    const pendingLocal=(db.entries||[]).filter(e=>localPendingIds.has(String(e.id)));
-   const localCatalog=catalogDirty?{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}:null;
    db=remote;
-   if(localCatalog) Object.assign(db,localCatalog);
    const byId=new Map((db.entries||[]).map(e=>[String(e.id),e]));
    pendingLocal.forEach(e=>byId.set(String(e.id),e));
-   db.entries=[...byId.values()].sort((a,b)=>String(b.date+b.time).localeCompare(String(a.date+a.time)));
+   db.entries=[...byId.values()];
    remoteLoaded=true;
    localStorage.setItem(key,JSON.stringify(db));
    render(); updateConnectionStatus();
-   if(pendingLocal.length || catalogDirty) await syncRemoteNow();
+   if(pendingLocal.length) await syncRemoteNow();
  }catch(e){updateConnectionStatus();}
 }
-function updateConnectionStatus(){const el=document.getElementById('syncStatus');if(!el)return;el.textContent=navigator.onLine?(pendingSync.length||catalogDirty?'● Online · sincronização pendente':'● Online · sincronizado'):'● Offline · dados guardados neste dispositivo';el.style.fontWeight='700';}
+function updateConnectionStatus(){const el=document.getElementById('syncStatus');if(!el)return;el.textContent=navigator.onLine?(pendingSync.length?'● Online · '+pendingSync.length+' pendente(s)':'● Online · sincronizado'):'● Offline · dados guardados neste dispositivo';el.style.fontWeight='700';}
 window.addEventListener('online',()=>{updateConnectionStatus();loadRemote()});window.addEventListener('offline',updateConnectionStatus);
+function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function money(n){return db.settings.currency+Number(n).toFixed(2)}
 function barberName(id){return db.barbers.find(x=>x.id==id)?.name||'—'}
 function serviceObj(name){return db.services.find(x=>x.name===name)}
@@ -511,7 +485,8 @@ function render(){brand.textContent=db.settings.name;renderInfo();renderIpad();r
 function entryQtySum(entries,type){return entries.reduce((a,e)=>a+(type==='service'?entryServiceQty(e):entryProductQty(e)),0)}
 function renderDashboard(){
 renderStockAlert();
-let today=db.entries.filter(e=>e.date==='2026-10-01');let rev=today.reduce((s,e)=>s+entryTotal(e),0),tips=today.reduce((s,e)=>s+Number(e.tip||0),0);
+let todayStr=localDate();
+let today=db.entries.filter(e=>e.date===todayStr);let rev=today.reduce((s,e)=>s+entryTotal(e),0),tips=today.reduce((s,e)=>s+Number(e.tip||0),0);
 const serviceRevenueToday=today.reduce((s,e)=>s+entryServiceTotal(e),0);
   const productRevenueToday=today.reduce((s,e)=>s+entryProductTotal(e),0);
   const serviceCommissionToday=today.reduce((s,e)=>{const b=db.barbers.find(x=>x.id==e.barber);return s+entryServiceTotal(e)*barberServiceCommissionRate(b)/100},0);
@@ -562,18 +537,18 @@ function renderCommissions(){
 function renderSettings(){setName.value=db.settings.name;setCurrency.value=db.settings.currency;setCommission.value=db.settings.commission;setOpen.value=db.settings.open;setClose.value=db.settings.close}
 function openModal(title,body){modalTitle.textContent=title;modalBody.innerHTML=body;modal.classList.add('open')}function closeModal(){modal.classList.remove('open')}
 function openBarber(id){let b=db.barbers.find(x=>x.id==id)||{id:null,name:'',commission:db.settings.commission,active:true};let shop=isShopBarber(b);openModal(id?'Editar barbeiro':'Novo barbeiro',`<label>Nome</label><input id="fName" value="${b.name}"><label>Comissão (%)</label><input id="fComm" type="number" value="${shop?0:b.commission}" ${shop?'disabled':''}><p class="small">${shop?'Este perfil é a própria barbearia. Serviços e produtos ficam 100% para a barbearia.':'Comissão dos serviços deste barbeiro.'}</p><label>Status</label><select id="fActive"><option value="1" ${b.active?'selected':''}>Ativo</option><option value="0" ${!b.active?'selected':''}>Inativo</option></select><br><br><button class="primary" onclick="saveBarber(${id||0})">Salvar</button>`)}
-function saveBarber(id){let name=fName.value.trim();let o={id:id||Date.now(),name,commission:name==='Elevate Barbershop'?0:Number(fComm.value),active:fActive.value==='1'};if(!o.name)return alert('Informe o nome');let i=db.barbers.findIndex(x=>x.id==id);if(i>=0)db.barbers[i]=o;else db.barbers.push(o);closeModal();save({catalog:true})}
-function delBarber(id){if(confirm('Excluir barbeiro?')){db.barbers=db.barbers.filter(x=>x.id!=id);save({catalog:true})}}
+function saveBarber(id){let name=fName.value.trim();let o={id:id||Date.now(),name,commission:name==='Elevate Barbershop'?0:Number(fComm.value),active:fActive.value==='1'};if(!o.name)return alert('Informe o nome');let i=db.barbers.findIndex(x=>x.id==id);if(i>=0)db.barbers[i]=o;else db.barbers.push(o);closeModal();save()}
+function delBarber(id){if(confirm('Excluir barbeiro?')){db.barbers=db.barbers.filter(x=>x.id!=id);save()}}
 function openService(id){let s=db.services.find(x=>x.id==id)||{id:null,name:'',price:0,duration:30};openModal(id?'Editar serviço':'Novo serviço',`<label>Nome</label><input id="fName" value="${s.name}"><label>Preço</label><input id="fPrice" type="number" step=".01" value="${s.price}"><label>Duração (min)</label><input id="fDur" type="number" value="${s.duration}"><br><br><button class="primary" onclick="saveService(${id||0})">Salvar</button>`)}
-function saveService(id){let o={id:id||Date.now(),name:fName.value.trim(),price:Number(fPrice.value),duration:Number(fDur.value)};let i=db.services.findIndex(x=>x.id==id);if(i>=0)db.services[i]=o;else db.services.push(o);closeModal();save({catalog:true})}
-function delService(id){if(confirm('Excluir serviço?')){db.services=db.services.filter(x=>x.id!=id);save({catalog:true})}}
+function saveService(id){let o={id:id||Date.now(),name:fName.value.trim(),price:Number(fPrice.value),duration:Number(fDur.value)};let i=db.services.findIndex(x=>x.id==id);if(i>=0)db.services[i]=o;else db.services.push(o);closeModal();save()}
+function delService(id){if(confirm('Excluir serviço?')){db.services=db.services.filter(x=>x.id!=id);save()}}
 function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',stock:0,cost:0,price:0,min:2,commission:0};openModal(id?'Editar produto':'Novo produto',`<div class="formgrid"><div><label>Produto</label><input id="fName" value="${p.name}"></div><div><label>Estoque</label><input id="fStock" type="number" value="${p.stock}"></div><div><label>Custo</label><input id="fCost" type="number" step=".01" value="${p.cost}"></div><div><label>Preço de venda</label><input id="fPrice" type="number" step=".01" value="${p.price}"></div><div><label>Comissão do barbeiro por unidade (€)</label><input id="fProdComm" type="number" min="0" step=".01" value="${p.commission||0}"></div><div><label>Estoque mínimo</label><input id="fMin" type="number" value="${p.min}"></div></div><br><button class="primary" onclick="saveProduct(${id||0})">Salvar</button>`)}
-function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save({catalog:true})}
-function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save({catalog:true})}}
-function openEntry(id){let e=db.entries.find(x=>x.id==id)||{id:null,date:'2026-10-01',time:new Date().toTimeString().slice(0,5),barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',payment:'Cash',tip:0,total:0};openModal(id?'Editar lançamento':'Novo lançamento',`<div class="formgrid"><div><label>Data</label><input id="fDate" type="date" value="${e.date}"></div><div><label>Hora</label><input id="fTime" type="time" value="${e.time}"></div><div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div><div><label>Serviço</label><select id="fService">${db.services.map(s=>`<option ${s.name===e.service?'selected':''}>${s.name}</option>`).join('')}</select></div><div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===e.payment?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(e.productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div><div><label>Valor</label><input id="fTotal" type="number" step=".01" value="${e.total}"></div><div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${e.tip}"></div><div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div></div><br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`)}
-function saveEntry(id){let o={id:id||crypto.randomUUID(),date:fDate.value,time:fTime.value,barber:Number(fBarber.value),service:fService.value,payment:fPay.value,productId:fProduct.value?Number(fProduct.value):null,productName:fProduct.value?(db.products.find(p=>p.id==Number(fProduct.value))?.name||''):'',productPrice:fProduct.value?Number(db.products.find(p=>p.id==Number(fProduct.value))?.price||0):0,tip:Number(fTip.value),tipPayment:fTipPay.value,total:Number(fTotal.value)};let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);queueSync(o);closeModal();save()}
+function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save()}
+function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save()}}
+function openEntry(id){let e=db.entries.find(x=>x.id==id)||{id:null,date:localDate(),time:new Date().toTimeString().slice(0,5),barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',payment:'Cash',tip:0,total:0};openModal(id?'Editar lançamento':'Novo lançamento',`<div class="formgrid"><div><label>Data</label><input id="fDate" type="date" value="${e.date}"></div><div><label>Hora</label><input id="fTime" type="time" value="${e.time}"></div><div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div><div><label>Serviço</label><select id="fService">${db.services.map(s=>`<option ${s.name===e.service?'selected':''}>${s.name}</option>`).join('')}</select></div><div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===e.payment?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(e.productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div><div><label>Valor</label><input id="fTotal" type="number" step=".01" value="${e.total}"></div><div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${e.tip}"></div><div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div></div><br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`)}
+function saveEntry(id){let o={id:id||Date.now(),date:fDate.value,time:fTime.value,barber:Number(fBarber.value),service:fService.value,payment:fPay.value,productId:fProduct.value?Number(fProduct.value):null,productName:fProduct.value?(db.products.find(p=>p.id==Number(fProduct.value))?.name||''):'',productPrice:fProduct.value?Number(db.products.find(p=>p.id==Number(fProduct.value))?.price||0):0,tip:Number(fTip.value),tipPayment:fTipPay.value,total:Number(fTotal.value)};let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);closeModal();save()}
 function delEntry(id){if(confirm('Excluir lançamento?')){db.entries=db.entries.filter(x=>x.id!=id);save()}}
-function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save({catalog:true});alert('Configurações salvas')}
+function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
 function filterCash(type){show('cash');if(type==='today')alert('Filtro de hoje aplicado no MVP. A versão online terá filtros por dia, semana, mês e período personalizado.')}
 
 let ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};
@@ -605,8 +580,8 @@ function entryClients(e){
   return saved>0?saved:serviceCount;
 }
 function renderIpadToday(){
-  const today=new Date().toISOString().slice(0,10);
-  const entries=db.entries.filter(e=>e.date===today || (today!=='2026-10-01' && e.date==='2026-10-01'));
+  const today=localDate();
+  const entries=db.entries.filter(e=>e.date===today);
   const total=entries.reduce((s,e)=>s+entryTotal(e),0), tips=entries.reduce((s,e)=>s+Number(e.tip||0),0), clients=entries.reduce((s,e)=>s+entryClients(e),0);
   ipadTodayTotal.textContent=`${entries.length} lançamentos · ${clients} clientes · ${money(total)} serviços/produtos · ${money(tips)} caixinhas`;
   if(!entries.length){ipadTodayEntries.innerHTML='<div class="small">Nenhum lançamento hoje.</div>';return}
@@ -700,7 +675,7 @@ function ipadSave(){
  const serviceNames=services.map(x=>`${x.qty}× ${x.name}`).join(' + ');
  const productNames=products.map(x=>`${x.qty}× ${x.name}`).join(' + ');
  db.entries.push({
-   id:crypto.randomUUID(),date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),
+   id:Date.now(),date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),
    barber:ipadState.barber,clients:services.length?Number(ipadState.clients||1):0,service:serviceNames,serviceItems:services,productName:productNames,productItems:products,
    payment:ipadState.payment,servicePayment:ipadState.payment,productPayment:products.length?ipadState.productPayment:null,
    productId:products.length===1?products[0].id:null,productPrice:productTotal,tip,tipPayment:tip?ipadState.tipPayment:'Cash',
