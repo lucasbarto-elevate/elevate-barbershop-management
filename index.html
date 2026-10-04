@@ -732,7 +732,11 @@ function saveEntry(id){
   const get=id=>document.getElementById(id);
   const date=get('fDate')?.value||localDate();
   const time=get('fTime')?.value||new Date().toTimeString().slice(0,5);
-  const barber=Number(get('fBarber')?.value||0);
+  const barberField=get('fBarber');
+  const barberValue=barberField?.value||'';
+  const selectedBarber=db.barbers.find(b=>String(b.id)===String(barberValue));
+  if(!selectedBarber) return alert('Selecione um barbeiro válido.');
+  const barber=selectedBarber.id;
   const serviceId=Number(get('fService')?.value||0);
   const productId=Number(get('fProduct')?.value||0)||null;
   const service=db.services.find(s=>Number(s.id)===serviceId);
@@ -779,6 +783,8 @@ function saveEntry(id){
   };
   const i=db.entries.findIndex(x=>String(x.id)===String(id));
   if(i>=0) db.entries[i]=o; else db.entries.push(o);
+  localStorage.setItem(key,JSON.stringify(db));
+  render();
   queueSync({id:o.id});
   closeModal();
   save({syncCatalog:false});
