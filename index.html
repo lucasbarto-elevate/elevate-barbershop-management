@@ -120,7 +120,19 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <table><thead><tr><th>Produto</th><th>Estoque</th><th>Custo</th><th>Venda</th><th>Comissão por venda</th><th>Status</th><th></th></tr></thead><tbody id="productList"></tbody></table></section>
 
 <section id="cash" class="page"><h1>Caixa / Lançamentos</h1><div class="sub">Registros por barbeiro, pagamento e gorjeta</div>
-<div class="toolbar"><div><strong>Resumo do Caixa</strong><div class="small">Valores separados por dia, semana, mês e ano.</div></div><button class="primary" onclick="openEntry()">+ Novo lançamento</button></div>
+<div class="toolbar"><div><strong>Resumo do Caixa</strong><div class="small">Consulte qualquer período: dia, semana, mês, ano ou datas personalizadas.</div></div><button class="primary" onclick="openEntry()">+ Novo lançamento</button></div>
+<div class="card" style="margin-bottom:16px">
+  <div class="actions">
+    <button onclick="setCashPeriod('today')">Hoje</button>
+    <button onclick="setCashPeriod('week')">Esta semana</button>
+    <button onclick="setCashPeriod('month')">Este mês</button>
+    <button onclick="setCashPeriod('year')">Este ano</button>
+  </div>
+  <div class="grid cards" style="margin-top:12px">
+    <div><label>Data inicial</label><input id="cashFrom" type="date" onchange="renderCash()"></div>
+    <div><label>Data final</label><input id="cashTo" type="date" onchange="renderCash()"></div>
+  </div>
+</div>
 <div class="grid stats" id="cashStats"></div>
 <table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
 
@@ -578,33 +590,48 @@ function requestStockNotifications(){
 }
 
 function renderProducts(){productList.innerHTML=db.products.map(p=>`<tr><td><b>${p.name}</b></td><td>${p.stock}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td><td>${money(p.commission||0)}</td><td><span class="badge">${p.stock<=p.min?'Estoque baixo':'Normal'}</span></td><td><button onclick="openProduct(${p.id})">Editar</button> <button class="danger" onclick="delProduct(${p.id})">Excluir</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto cadastrado ainda.</td></tr>'}
-function cashPeriodStats(type){
-  const today=new Date(localDate()+'T12:00:00');
-  let from,to,label;
-  if(type==='day'){from=to=localDate();label='Hoje';}
+function cashDateRange(type){
+  const d=new Date(localDate()+'T12:00:00');
+  let from,to;
+  if(type==='today'){from=to=localDate();}
   else if(type==='week'){
-    const d=new Date(today); const day=d.getDay(); const diff=day===0?-6:1-day;
-    d.setDate(d.getDate()+diff); from=localDate(d); const t=new Date(d); t.setDate(t.getDate()+6); to=localDate(t); label='Esta semana';
+    const day=d.getDay(), diff=day===0?-6:1-day;
+    const a=new Date(d); a.setDate(a.getDate()+diff);
+    const b=new Date(a); b.setDate(b.getDate()+6);
+    from=localDate(a); to=localDate(b);
   } else if(type==='month'){
-    const d=new Date(today); from=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; const t=new Date(d.getFullYear(),d.getMonth()+1,0); to=localDate(t); label='Este mês';
+    const a=new Date(d.getFullYear(),d.getMonth(),1), b=new Date(d.getFullYear(),d.getMonth()+1,0);
+    from=localDate(a); to=localDate(b);
   } else {
-    from=today.getFullYear()+'-01-01'; to=today.getFullYear()+'-12-31'; label='Este ano';
+    from=d.getFullYear()+'-01-01'; to=d.getFullYear()+'-12-31';
   }
-  const es=db.entries.filter(e=>e.date>=from&&e.date<=to);
-  const revenue=es.reduce((s,e)=>s+entryTotal(e),0), tips=es.reduce((s,e)=>s+Number(e.tip||0),0);
-  return {label,es,revenue,tips,from,to};
+  return {from,to};
+}
+function setCashPeriod(type){
+  const r=cashDateRange(type);
+  cashFrom.value=r.from; cashTo.value=r.to;
+  renderCash();
+}
+function cashPeriodStats(from,to){
+  const es=db.entries.filter(e=>(!from||e.date>=from)&&(!to||e.date<=to));
+  return {
+    es,
+    revenue:es.reduce((s,e)=>s+entryTotal(e),0),
+    services:es.reduce((s,e)=>s+entryServiceTotal(e),0),
+    products:es.reduce((s,e)=>s+entryProductTotal(e),0),
+    tips:es.reduce((s,e)=>s+Number(e.tip||0),0)
+  };
 }
 function renderCash(){
-  const periods=['day','week','month','year'];
-  cashStats.innerHTML=periods.map(type=>{
-    const p=cashPeriodStats(type);
-    return `<div class="card">
-      <div class="label">${p.label}</div>
-      <div class="value">${money(p.revenue)}</div>
-      <div class="small">${p.es.length} lançamento(s) · ${money(p.tips)} caixinhas</div>
-      <div class="small" style="margin-top:6px">${p.from} → ${p.to}</div>
-    </div>`;
-  }).join('');
+  const from=cashFrom?.value||localDate(), to=cashTo?.value||from;
+  const p=cashPeriodStats(from,to);
+  cashStats.innerHTML=[
+    ['Faturamento',money(p.revenue)],
+    ['Serviços',money(p.services)],
+    ['Produtos',money(p.products)],
+    ['Caixinhas',money(p.tips)],
+    ['Lançamentos',p.es.length]
+  ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="small">${from} → ${to}</div></div>`).join('');
   const es=db.entries.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   entryList.innerHTML=es.map(e=>`<tr><td>${e.date} ${e.time}</td><td>${barberName(e.barber)}</td><td>${e.service||'—'}</td><td>${e.productName||'—'}</td><td>${e.servicePayment||e.payment||'—'}</td><td>${money(e.tip||0)}</td><td>${e.tipPayment||'—'}</td><td><b>${money(entryTotal(e))}</b></td><td><button onclick="openEntry(${e.id})">Editar</button> <button class="danger" onclick="delEntry(${e.id})">Excluir</button></td></tr>`).join('');
 }
