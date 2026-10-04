@@ -10,7 +10,7 @@ export const seed = {
     ['Scalp peeling',30,30],['Skin fade and beard',32,30],['Haircut, Beard, …',52,80],['Kids Haircut Skin Fade',20,30],['Kids Haircut',16,30],['Brazilian Keratin',50,60],['Scissors Cut',27,30],['Haircut Beard …',42,70],['Student School',20,30],['Haircut and Beard Trim',37,60],['Skin Fade',24,30],['Classic Haircut',20,30],['Beard Trim',16,30],['Hot Towel Shave',23,30],['Nose waxing',10,10],['Eyebrowns',5,10],['Combo - offer',30,30],['Line up',10,30],['Scissors student',25,30],['Student College',22,30],['Beard Hydration',20,30],['Hair Hydration',30,30],['Haircut + Hydration',50,30],['Haircut and hot towel',42,60],['ear wax',10,10],['Scissors Cut advanced',45,60],['Beard Pigmentation',15,30]
   ].map((x,i)=>({id:i+1,name:x[0],price:x[1],duration:x[2]})),
   products:[
-    {id:1,name:'Matte Red one',stock:0,cost:0,price:0,min:2,commission:0},
+    {id:1,name:'Matte Red one',stock:0,cost:0,price:15,min:2,commission:0},
     {id:2,name:'Matte Pomade',stock:0,cost:0,price:0,min:2,commission:0},
     {id:3,name:'Numero 7 RED',stock:0,cost:0,price:0,min:2,commission:0},
     {id:4,name:'Sea Salt',stock:0,cost:0,price:0,min:2,commission:0},
