@@ -120,7 +120,7 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <table><thead><tr><th>Produto</th><th>Estoque</th><th>Custo</th><th>Venda</th><th>Comissão por venda</th><th>Status</th><th></th></tr></thead><tbody id="productList"></tbody></table></section>
 
 <section id="cash" class="page"><h1>Caixa / Lançamentos</h1><div class="sub">Registros por barbeiro, pagamento e gorjeta</div>
-<div class="toolbar"><div><button onclick="filterCash('today')">Hoje</button> <button onclick="filterCash('all')">Todos</button></div><button class="primary" onclick="openEntry()">+ Novo lançamento</button></div>
+<div class="toolbar"><div><strong>Resumo do Caixa</strong><div class="small">Valores separados por dia, semana, mês e ano.</div></div><button class="primary" onclick="openEntry()">+ Novo lançamento</button></div>
 <div class="grid stats" id="cashStats"></div>
 <table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
 
@@ -578,7 +578,37 @@ function requestStockNotifications(){
 }
 
 function renderProducts(){productList.innerHTML=db.products.map(p=>`<tr><td><b>${p.name}</b></td><td>${p.stock}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td><td>${money(p.commission||0)}</td><td><span class="badge">${p.stock<=p.min?'Estoque baixo':'Normal'}</span></td><td><button onclick="openProduct(${p.id})">Editar</button> <button class="danger" onclick="delProduct(${p.id})">Excluir</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto cadastrado ainda.</td></tr>'}
-function renderCash(){let es=db.entries.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));let rev=es.reduce((s,e)=>s+entryTotal(e),0),tips=es.reduce((s,e)=>s+Number(e.tip||0),0);cashStats.innerHTML=[['Lançamentos',es.length],['Serviços',money(rev)],['Gorjetas',money(tips)]].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');entryList.innerHTML=es.map(e=>`<tr><td>${e.date} ${e.time}</td><td>${barberName(e.barber)}</td><td>${e.service}</td><td>${e.productName||'—'}</td><td>${e.payment}</td><td>${money(e.tip)}</td><td>${e.tipPayment||'—'}</td><td><b>${money(e.total)}</b></td><td><button onclick="openEntry(${e.id})">Editar</button> <button class="danger" onclick="delEntry(${e.id})">Excluir</button></td></tr>`).join('')}
+function cashPeriodStats(type){
+  const today=new Date(localDate()+'T12:00:00');
+  let from,to,label;
+  if(type==='day'){from=to=localDate();label='Hoje';}
+  else if(type==='week'){
+    const d=new Date(today); const day=d.getDay(); const diff=day===0?-6:1-day;
+    d.setDate(d.getDate()+diff); from=localDate(d); const t=new Date(d); t.setDate(t.getDate()+6); to=localDate(t); label='Esta semana';
+  } else if(type==='month'){
+    const d=new Date(today); from=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; const t=new Date(d.getFullYear(),d.getMonth()+1,0); to=localDate(t); label='Este mês';
+  } else {
+    from=today.getFullYear()+'-01-01'; to=today.getFullYear()+'-12-31'; label='Este ano';
+  }
+  const es=db.entries.filter(e=>e.date>=from&&e.date<=to);
+  const revenue=es.reduce((s,e)=>s+entryTotal(e),0), tips=es.reduce((s,e)=>s+Number(e.tip||0),0);
+  return {label,es,revenue,tips,from,to};
+}
+function renderCash(){
+  const periods=['day','week','month','year'];
+  cashStats.innerHTML=periods.map(type=>{
+    const p=cashPeriodStats(type);
+    return `<div class="card">
+      <div class="label">${p.label}</div>
+      <div class="value">${money(p.revenue)}</div>
+      <div class="small">${p.es.length} lançamento(s) · ${money(p.tips)} caixinhas</div>
+      <div class="small" style="margin-top:6px">${p.from} → ${p.to}</div>
+    </div>`;
+  }).join('');
+  const es=db.entries.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+  entryList.innerHTML=es.map(e=>`<tr><td>${e.date} ${e.time}</td><td>${barberName(e.barber)}</td><td>${e.service||'—'}</td><td>${e.productName||'—'}</td><td>${e.servicePayment||e.payment||'—'}</td><td>${money(e.tip||0)}</td><td>${e.tipPayment||'—'}</td><td><b>${money(entryTotal(e))}</b></td><td><button onclick="openEntry(${e.id})">Editar</button> <button class="danger" onclick="delEntry(${e.id})">Excluir</button></td></tr>`).join('');
+}
+
 function renderCommissions(){
   const from=document.getElementById('commFrom')?.value||'';
   const to=document.getElementById('commTo')?.value||'';
