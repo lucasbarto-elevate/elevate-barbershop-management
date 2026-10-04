@@ -623,6 +623,9 @@ function cashPeriodStats(from,to){
   };
 }
 let cashFilter='all';
+function cashHasServices(e){return getServiceItems(e).some(x=>Number(x.qty||0)>0)||Number(e.serviceTotal||0)>0;}
+function cashHasProducts(e){return getProductItems(e).some(x=>Number(x.qty||0)>0)||Number(e.productTotal||0)>0;}
+function cashHasTip(e){return Number(e.tip||0)>0;}
 function setCashFilter(filter){cashFilter=filter;renderCash()}
 function renderCash(){
   const from=cashFrom?.value||localDate(), to=cashTo?.value||from;
@@ -636,13 +639,18 @@ function renderCash(){
   ];
   cashStats.innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div><div class="small">'+from+' → '+to+'</div></button>').join('');
   let es=p.es.slice();
-  if(cashFilter==='services') es=es.filter(e=>entryServiceTotal(e)>0 || !!e.service || (Array.isArray(e.serviceItems)&&e.serviceItems.length));
-  else if(cashFilter==='products') es=es.filter(e=>entryProductTotal(e)>0 || !!e.productId || !!e.productName || (Array.isArray(e.productItems)&&e.productItems.length));
-  else if(cashFilter==='tips') es=es.filter(e=>Number(e.tip||0)>0);
-  es.sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  const filterLabel={all:'Todos os lançamentos',services:'Lançamentos com serviços',products:'Lançamentos com produtos',tips:'Lançamentos com caixinha',entries:'Todos os lançamentos'}[cashFilter]||'Todos os lançamentos';
-  const rows=es.map(e=>'<tr><td>'+e.date+' '+e.time+'</td><td>'+barberName(e.barber)+'</td><td>'+(e.service||'—')+'</td><td>'+(e.productName||'—')+'</td><td>'+(e.servicePayment||e.payment||'—')+'</td><td>'+money(e.tip||0)+'</td><td>'+(e.tipPayment||'—')+'</td><td><b>'+money(entryTotal(e))+'</b></td><td><button onclick="openEntry('+e.id+')">Editar</button> <button class="danger" onclick="delEntry('+e.id+')">Excluir</button></td></tr>').join('');
-  entryList.innerHTML='<tr><td colspan="9" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s)</td></tr>'+rows;
+  if(cashFilter==='services') es=es.filter(cashHasServices);
+  else if(cashFilter==='products') es=es.filter(cashHasProducts);
+  else if(cashFilter==='tips') es=es.filter(cashHasTip);
+  es.sort((a,b)=>((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')));
+  const filterLabel={all:'Faturamento · todos os lançamentos',services:'Serviços · lançamentos que têm serviço',products:'Produtos · lançamentos que têm produto',tips:'Caixinhas · lançamentos com gorjeta',entries:'Todos os lançamentos'}[cashFilter]||'Todos os lançamentos';
+  const rows=es.map(e=>{
+    const st=entryServiceTotal(e), pt=entryProductTotal(e), tip=Number(e.tip||0);
+    const servicePay=st>0?(e.servicePayment||e.payment||'—'):'—';
+    const productPay=pt>0?(e.productPayment||e.productPay||'—'):'—';
+    return '<tr><td>'+e.date+' '+e.time+'</td><td>'+barberName(e.barber)+'</td><td>'+(e.service||'—')+'</td><td>'+(e.productName||'—')+'</td><td>'+servicePay+'</td><td>'+money(tip)+'</td><td>'+(tip?(e.tipPayment||'Cash'):'—')+'</td><td><b>'+money(st+pt)+'</b></td><td><button onclick="openEntry('+e.id+')">Editar</button> <button class="danger" onclick="delEntry('+e.id+')">Excluir</button></td></tr>';
+  }).join('');
+  entryList.innerHTML='<tr><td colspan="9" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s) · período '+from+' → '+to+'</td></tr>'+rows;
 }
 function renderCommissions(){
   const from=document.getElementById('commFrom')?.value||'';
