@@ -367,13 +367,21 @@ function queueDelete(id){
 async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
 async function loadRemote(){
  if(!navigator.onLine){updateConnectionStatus();return;}
- if(syncInFlight || pendingSync.length || pendingDeletes.length || catalogDirty){updateConnectionStatus();return;}
+ // If this device has no launches and only a stale catalog flag is left,
+ // recover the server database instead of staying on an empty local copy.
+ const staleCatalogOnly=catalogDirty && !pendingSync.length && !pendingDeletes.length && !(db.entries||[]).length;
+ if(syncInFlight || pendingSync.length || pendingDeletes.length || (catalogDirty && !staleCatalogOnly)){updateConnectionStatus();return;}
  try{
    const r=await fetch('/api/data',{cache:'no-store'}); if(!r.ok) throw new Error('data');
    const remote=await r.json();
+   if(!Array.isArray(remote.entries)) throw new Error('invalid-data');
    db=remote;
    remoteLoaded=true;
    localStorage.setItem(key,JSON.stringify(db));
+   if(staleCatalogOnly){
+     catalogDirty=false;
+     localStorage.removeItem(catalogSyncKey);
+   }
    render();updateConnectionStatus();
  }catch(e){updateConnectionStatus();}
 }
