@@ -1,4 +1,4 @@
-const CACHE='elevate-shell-v3';
+const CACHE='elevate-shell-v4';
 const ASSETS=['/','/index.html','/elevate-logo-white.png','/manifest.json'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
