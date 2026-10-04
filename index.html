@@ -248,7 +248,8 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <div class="modal" id="modal"><div class="modalbox"><div class="modalhead"><h2 id="modalTitle"></h2><button onclick="closeModal()">✕</button></div><div id="modalBody"></div></div></div>
 
 <script>
-const key='elevate_barbershop_shared_v5';
+const key='elevate_barbershop_shared_v6';
+const previousKey='elevate_barbershop_shared_v5';
 const legacyKey='elevate_barbershop_seed_v3';
 const syncKey='elevate_barbershop_pending_sync_v1';
 const catalogSyncKey='elevate_barbershop_catalog_dirty_v1';
@@ -256,7 +257,7 @@ const deleteSyncKey='elevate_barbershop_pending_delete_v1';
 let pendingSync=JSON.parse(localStorage.getItem(syncKey)||'[]');
 let pendingDeletes=JSON.parse(localStorage.getItem(deleteSyncKey)||'[]');
 let catalogDirty=localStorage.getItem(catalogSyncKey)==='1';
-let db=JSON.parse(localStorage.getItem(key)||localStorage.getItem(legacyKey)||'null')||{
+let db=JSON.parse(localStorage.getItem(key)||'null')||JSON.parse(localStorage.getItem(previousKey)||localStorage.getItem(legacyKey)||'null')||{
 settings:{name:'Elevate Barbershop',currency:'€',commission:50,open:'10:00',close:'20:00'},
 barbers:[
 {id:1,name:'Lucas Carvalho',commission:50,active:true},
@@ -266,7 +267,7 @@ barbers:[
 services:[
 ['Scalp peeling',30,30],['Skin fade and beard',32,30],['Haircut, Beard, …',52,80],['Kids Haircut Skin Fade',20,30],['Kids Haircut',16,30],['Brazilian Keratin',50,60],['Scissors Cut',27,30],['Haircut Beard …',42,70],['Student School',20,30],['Haircut and Beard Trim',37,60],['Skin Fade',24,30],['Classic Haircut',20,30],['Beard Trim',16,30],['Hot Towel Shave',23,30],['Nose waxing',10,10],['Eyebrowns',5,10],['Combo - offer',30,30],['Line up',10,30],['Scissors student',25,30],['Student College',22,30],['Beard Hydration',20,30],['Hair Hydration',30,30],['Haircut + Hydration',50,30],['Haircut and hot towel',42,60],['ear wax',10,10],['Scissors Cut advanced',45,60],['Beard Pigmentation',15,30]].map((x,i)=>({id:i+1,name:x[0],price:x[1],duration:x[2]})),
 products:[
-{id:1,name:'Matte Red one',stock:0,cost:0,price:0,min:2,commission:0},
+{id:1,name:'Matte Red one',stock:0,cost:0,price:15,min:2,commission:0},
 {id:2,name:'Matte Pomade',stock:0,cost:0,price:0,min:2,commission:0},
 {id:3,name:'Numero 7 RED',stock:0,cost:0,price:0,min:2,commission:0},
 {id:4,name:'Sea Salt',stock:0,cost:0,price:0,min:2,commission:0},
@@ -293,6 +294,15 @@ entries:[
 {id:11,date:'2026-10-01',time:'12:04',barber:2,service:'Skin Fade',payment:'SumUp',tip:0,total:24},
 {id:12,date:'2026-10-01',time:'11:51',barber:1,service:'Haircut and Beard Trim',payment:'SumUp',tip:3,total:37}
 ]};
+const previousLocal=JSON.parse(localStorage.getItem(previousKey)||'null');
+if(Array.isArray(db.entries)&&db.entries.length===0 && Array.isArray(previousLocal?.entries) && previousLocal.entries.length>0){
+  db.entries=previousLocal.entries;
+}
+if(!Array.isArray(db.barbers)||db.barbers.length===0 || !Array.isArray(db.services)||db.services.length===0 || !Array.isArray(db.products)||db.products.length===0){
+  localStorage.removeItem(key);
+  localStorage.removeItem(previousKey);
+  location.reload();
+}
 db.products=(db.products||[]).map(p=>({...p,commission:Number(p.commission||0)}));
 // Preserva dados existentes e migra para a chave final sem apagar lançamentos já guardados.
 localStorage.setItem(key,JSON.stringify(db));
