@@ -17,21 +17,28 @@ async function readAllEntries(){
 
 async function ensureMigrated(){
   let catalog = await store.get(CATALOG_KEY, { type:'json' });
-  if(catalog) return catalog;
-
   const legacy = await store.get(LEGACY_KEY, { type:'json' });
   const source = legacy || cloneSeed();
-  catalog = {
-    settings: source.settings,
-    barbers: source.barbers || [],
-    services: source.services || [],
-    products: source.products || []
-  };
-  await store.setJSON(CATALOG_KEY, catalog);
 
-  const entries = Array.isArray(source.entries) ? source.entries : [];
-  for(const entry of entries){
-    await store.setJSON(`${ENTRY_PREFIX}${String(entry.id)}`, entry);
+  if(!catalog){
+    catalog = {
+      settings: source.settings,
+      barbers: source.barbers || [],
+      services: source.services || [],
+      products: source.products || []
+    };
+    await store.setJSON(CATALOG_KEY, catalog);
+  }
+
+  // Recupera os lancamentos antigos se o catalogo existir mas os blobs de entries estiverem ausentes.
+  const existing = await store.list({ prefix: ENTRY_PREFIX });
+  if(!existing.blobs?.length){
+    const sourceEntries = Array.isArray(source.entries) ? source.entries : [];
+    if(sourceEntries.length){
+      await Promise.all(sourceEntries.map(entry =>
+        store.setJSON(ENTRY_PREFIX + String(entry.id), entry, { onlyIfNew:true })
+      ));
+    }
   }
   return catalog;
 }
