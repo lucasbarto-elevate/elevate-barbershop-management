@@ -695,99 +695,83 @@ function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.
 function openEntry(id){
   const e=db.entries.find(x=>String(x.id)===String(id))||{
     id:null,date:localDate(),time:new Date().toTimeString().slice(0,5),
-    barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',
-    payment:'Cash',servicePayment:'Cash',productPayment:null,tip:0,tipPayment:'Cash',total:0
+    barber:db.barbers[0]?.id||0,payment:'Cash',servicePayment:'Cash',
+    productPayment:'Cash',tip:0,tipPayment:'Cash',clients:1
   };
-  const services=getServiceItems(e);
-  const products=getProductItems(e);
-  const firstService=services[0];
-  const firstProduct=products[0];
-  const serviceName=firstService?.name||'';
-  const productId=firstProduct?.id||null;
+  const services=getServiceItems(e), products=getProductItems(e);
+  const firstService=services[0], firstProduct=products[0];
   const servicePayment=e.servicePayment||e.payment||'Cash';
   const productPayment=e.productPayment||'Cash';
-  const total=entryTotal(e);
+  const serviceUnit=Number(firstService?.unitPrice ?? db.services.find(s=>s.id==firstService?.id)?.price ?? 0);
+  const productUnit=Number(firstProduct?.unitPrice ?? db.products.find(p=>p.id==firstProduct?.id)?.price ?? 0);
   openModal(id?'Editar lançamento':'Novo lançamento',`
     <div class="formgrid">
       <div><label>Data</label><input id="fDate" type="date" value="${e.date||localDate()}"></div>
       <div><label>Hora</label><input id="fTime" type="time" value="${e.time||'00:00'}"></div>
-      <div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div>
+      <div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${String(b.id)===String(e.barber)?'selected':''}>${b.name}</option>`).join('')}</select></div>
       <div><label>Serviço</label><select id="fService">
         <option value="">Nenhum</option>
-        ${db.services.map(s=>`<option value="${s.id}" ${s.name===serviceName?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}
+        ${db.services.map(s=>`<option value="${s.id}" ${String(s.id)===String(firstService?.id)?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}
       </select></div>
+      <div><label>Quantidade de serviços</label><input id="fServiceQty" type="number" min="1" step="1" value="${firstService?.qty||1}"></div>
+      <div><label>Valor por serviço (€)</label><input id="fServiceValue" type="number" min="0" step=".01" value="${serviceUnit.toFixed(2)}"></div>
       <div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===servicePayment?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div>
+      <div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(firstProduct?.id)?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div>
+      <div><label>Quantidade de produtos</label><input id="fProductQty" type="number" min="1" step="1" value="${firstProduct?.qty||1}"></div>
+      <div><label>Valor por produto (€)</label><input id="fProductValue" type="number" min="0" step=".01" value="${productUnit.toFixed(2)}"></div>
       <div><label>Pagamento do produto</label><select id="fProductPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===productPayment?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div><label>Valor total do lançamento</label><input id="fTotal" type="number" step=".01" value="${total.toFixed(2)}"></div>
-      <div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${Number(e.tip||0).toFixed(2)}"></div>
+      <div><label>Gorjeta / Caixinha (€)</label><input id="fTip" type="number" min="0" step=".01" value="${Number(e.tip||0).toFixed(2)}"></div>
       <div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div>
     </div>
-    <div class="small" style="margin-top:10px">${services.length>1||products.length>1?'Este lançamento tem múltiplos itens. A edição administrativa simplificada preserva o lançamento, mas permite alterar o item principal.':''}</div>
-    <br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`
+    <div id="editTotalPreview" class="card" style="margin-top:14px;background:#f8f8f8"></div>
+    <div class="small" style="margin-top:10px">A edição altera separadamente serviço, produto, quantidades, pagamentos e caixinha. O total é recalculado automaticamente.</div>
+    <br><button class="primary" onclick="saveEntry(${id||0})">Salvar alterações</button>`
   );
+  updateEntryEditPreview();
+}
+function updateEntryEditPreview(){
+  const g=id=>document.getElementById(id);
+  const sq=Math.max(0,Number(g('fServiceQty')?.value||0)), sv=Math.max(0,Number(g('fServiceValue')?.value||0));
+  const pq=Math.max(0,Number(g('fProductQty')?.value||0)), pv=Math.max(0,Number(g('fProductValue')?.value||0));
+  const tip=Math.max(0,Number(g('fTip')?.value||0));
+  const serviceName=g('fService')?.selectedOptions?.[0]?.textContent||'Nenhum';
+  const productName=g('fProduct')?.selectedOptions?.[0]?.textContent||'Nenhum';
+  const st=g('fService')?.value?sq*sv:0, pt=g('fProduct')?.value?pq*pv:0;
+  const el=g('editTotalPreview'); if(el) el.innerHTML=`<b>Resumo</b><div class="small">${serviceName}: ${sq}× ${money(sv)} = <b>${money(st)}</b></div><div class="small">${productName}: ${g('fProduct')?.value?pq+'× '+money(pv)+' = '+money(pt):'Nenhum'}</div><div class="small">Caixinha: ${money(tip)}</div><div style="margin-top:6px"><b>Total: ${money(st+pt)}</b></div>`;
 }
 function saveEntry(id){
   const old=db.entries.find(x=>String(x.id)===String(id));
-  const get=id=>document.getElementById(id);
-  const date=get('fDate')?.value||localDate();
-  const time=get('fTime')?.value||new Date().toTimeString().slice(0,5);
-  const barberField=get('fBarber');
-  const barberValue=barberField?.value||'';
-  const selectedBarber=db.barbers.find(b=>String(b.id)===String(barberValue));
-  if(!selectedBarber) return alert('Selecione um barbeiro válido.');
-  const barber=selectedBarber.id;
-  const serviceId=Number(get('fService')?.value||0);
-  const productId=Number(get('fProduct')?.value||0)||null;
-  const service=db.services.find(s=>Number(s.id)===serviceId);
-  const product=db.products.find(p=>Number(p.id)===productId);
-  const servicePayment=get('fPay')?.value||'Cash';
-  const productPayment=get('fProductPay')?.value||'Cash';
-  const tip=Number(get('fTip')?.value||0);
-  const requestedTotal=Number(get('fTotal')?.value||0);
-  const oldServices=getServiceItems(old||{});
-  const oldProducts=getProductItems(old||{});
-  let serviceItems=[];
-  let productItems=[];
-  if(service){
-    const oldMatch=oldServices.find(x=>Number(x.id)===Number(service.id));
-    let serviceValue=Number(service.price||0);
-    if(product) serviceValue=Math.max(0,requestedTotal-Number(product.price||0));
-    else if(requestedTotal>0) serviceValue=requestedTotal;
-    serviceItems=[{id:service.id,name:service.name,qty:Number(oldMatch?.qty||1),unitPrice:serviceValue}];
-  }else if(!product){
-    serviceItems=oldServices;
-  }
-  if(product){
-    const oldMatch=oldProducts.find(x=>Number(x.id)===Number(product.id));
-    productItems=[{id:product.id,name:product.name,qty:Number(oldMatch?.qty||1),unitPrice:Number(product.price||0),commission:Number(product.commission||0)}];
-  }else if(!service){
-    productItems=oldProducts;
-  }
-  const clients=serviceItems.length?Number(old?.clients||1):0;
-  const serviceTotal=serviceItems.reduce((sum,x)=>sum+Number(x.qty||1)*Number(x.unitPrice||0),0);
-  const productTotal=productItems.reduce((sum,x)=>sum+Number(x.qty||1)*Number(x.unitPrice||0),0);
+  const get=x=>document.getElementById(x);
+  const date=get('fDate')?.value||localDate(), time=get('fTime')?.value||new Date().toTimeString().slice(0,5);
+  const barber=Number(get('fBarber')?.value||0);
+  if(!db.barbers.some(b=>String(b.id)===String(barber))) return alert('Selecione um barbeiro válido.');
+  const serviceId=Number(get('fService')?.value||0)||null, productId=Number(get('fProduct')?.value||0)||null;
+  const service=db.services.find(s=>Number(s.id)===serviceId), product=db.products.find(p=>Number(p.id)===productId);
+  const sq=Math.max(1,Math.floor(Number(get('fServiceQty')?.value||1)));
+  const sv=Math.max(0,Number(get('fServiceValue')?.value||0));
+  const pq=Math.max(1,Math.floor(Number(get('fProductQty')?.value||1)));
+  const pv=Math.max(0,Number(get('fProductValue')?.value||0));
+  const tip=Math.max(0,Number(get('fTip')?.value||0));
+  const serviceItems=service?[{id:service.id,name:service.name,qty:sq,unitPrice:sv}]:[];
+  const productItems=product?[{id:product.id,name:product.name,qty:pq,unitPrice:pv,commission:Number(product.commission||0)}]:[];
+  const serviceTotal=serviceItems.reduce((sum,x)=>sum+Number(x.qty)*Number(x.unitPrice),0);
+  const productTotal=productItems.reduce((sum,x)=>sum+Number(x.qty)*Number(x.unitPrice),0);
   const o={
-    id:id||Date.now(),date,time,barber,clients,
-    service:serviceItems.map(x=>`${x.qty||1}× ${x.name}`).join(' + '),
-    serviceItems,
+    id:id||Date.now(),date,time,barber,
+    clients:serviceItems.length?Math.max(1,Number(old?.clients||1)):0,
+    service:serviceItems.map(x=>`${x.qty}× ${x.name}`).join(' + '),serviceItems,
     productId:productItems.length===1?productItems[0].id:null,
-    productName:productItems.map(x=>`${x.qty||1}× ${x.name}`).join(' + '),
-    productPrice:productTotal,
-    productItems,
-    payment:serviceItems.length?servicePayment:null,
-    servicePayment:serviceItems.length?servicePayment:null,
-    productPayment:productItems.length?productPayment:null,
-    tip,tipPayment:tip>0?(get('fTipPay')?.value||'Cash'):null,
-    total:serviceTotal+productTotal
+    productName:productItems.map(x=>`${x.qty}× ${x.name}`).join(' + '),productPrice:productTotal,productItems,
+    payment:serviceItems.length?get('fPay').value:null,
+    servicePayment:serviceItems.length?get('fPay').value:null,
+    productPayment:productItems.length?get('fProductPay').value:null,
+    tip,tipPayment:tip>0?get('fTipPay').value:null,total:serviceTotal+productTotal
   };
   const i=db.entries.findIndex(x=>String(x.id)===String(id));
   if(i>=0) db.entries[i]=o; else db.entries.push(o);
   localStorage.setItem(key,JSON.stringify(db));
-  render();
-  queueSync({id:o.id});
-  closeModal();
-  save({syncCatalog:false});
+  render(); closeModal(); queueSync({id:o.id});
+  setTimeout(()=>updateEntryEditPreview(),0);
 }function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
 function filterCash(type){show('cash');if(type==='today')alert('Filtro de hoje aplicado no MVP. A versão online terá filtros por dia, semana, mês e período personalizado.')}
 
