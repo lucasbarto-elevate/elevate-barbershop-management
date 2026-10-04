@@ -729,7 +729,8 @@ function openEntry(id){
   );
   updateEntryEditPreview();
 }
-function editServiceChanged(){const s=document.getElementById('fService'),v=document.getElementById('fServiceValue');const x=db.services.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}\nfunction editProductChanged(){const s=document.getElementById('fProduct'),v=document.getElementById('fProductValue');const x=db.products.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}\nfunction updateEntryEditPreview(){
+function editServiceChanged(){const s=document.getElementById('fService'),v=document.getElementById('fServiceValue');const x=db.services.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}
+function editProductChanged(){const s=document.getElementById('fProduct'),v=document.getElementById('fProductValue');const x=db.products.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}\nfunction updateEntryEditPreview(){
   const g=id=>document.getElementById(id);
   const sq=Math.max(0,Number(g('fServiceQty')?.value||0)), sv=Math.max(0,Number(g('fServiceValue')?.value||0));
   const pq=Math.max(0,Number(g('fProductQty')?.value||0)), pv=Math.max(0,Number(g('fProductValue')?.value||0));
