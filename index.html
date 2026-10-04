@@ -17,7 +17,7 @@ nav{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.navbtn{border:
 main{max-width:1220px;margin:28px auto;padding:0 20px}.page{display:none}.page.active{display:block}
 h1{margin:0 0 5px;font-size:29px;letter-spacing:-.02em}.sub{color:var(--muted);margin-bottom:22px}
 .grid{display:grid;gap:14px}.stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:18px}.cards{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 3px 14px #0000000b}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 3px 14px #0000000b}.cash-filter-card{cursor:pointer;transition:.15s}.cash-filter-card:hover{border-color:#000;transform:translateY(-1px)}.cash-filter-card.selected{background:#000;color:#fff;border-color:#000}.cash-filter-card.selected .label,.cash-filter-card.selected .small{color:#fff}
 .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.value{font-size:26px;font-weight:800;margin-top:6px}.small{font-size:13px;color:var(--muted)}
 .toolbar{display:flex;gap:10px;justify-content:space-between;align-items:center;margin:14px 0;flex-wrap:wrap}
 button,.btn{border:1px solid #cfcfcf;background:#fff;color:#000;padding:11px 15px;border-radius:10px;cursor:pointer;font-weight:700;min-height:42px}button:active{transform:scale(.98)}.primary{background:#000;color:#fff;border-color:#000}.danger{color:var(--danger)}
@@ -622,20 +622,28 @@ function cashPeriodStats(from,to){
     tips:es.reduce((s,e)=>s+Number(e.tip||0),0)
   };
 }
+let cashFilter='all';
+function setCashFilter(filter){cashFilter=filter;renderCash()}
 function renderCash(){
   const from=cashFrom?.value||localDate(), to=cashTo?.value||from;
   const p=cashPeriodStats(from,to);
-  cashStats.innerHTML=[
-    ['Faturamento',money(p.revenue)],
-    ['Serviços',money(p.services)],
-    ['Produtos',money(p.products)],
-    ['Caixinhas',money(p.tips)],
-    ['Lançamentos',p.es.length]
-  ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="small">${from} → ${to}</div></div>`).join('');
-  const es=db.entries.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  entryList.innerHTML=es.map(e=>`<tr><td>${e.date} ${e.time}</td><td>${barberName(e.barber)}</td><td>${e.service||'—'}</td><td>${e.productName||'—'}</td><td>${e.servicePayment||e.payment||'—'}</td><td>${money(e.tip||0)}</td><td>${e.tipPayment||'—'}</td><td><b>${money(entryTotal(e))}</b></td><td><button onclick="openEntry(${e.id})">Editar</button> <button class="danger" onclick="delEntry(${e.id})">Excluir</button></td></tr>`).join('');
+  const cards=[
+    ['all','Faturamento',money(p.revenue)],
+    ['services','Serviços',money(p.services)],
+    ['products','Produtos',money(p.products)],
+    ['tips','Caixinhas',money(p.tips)],
+    ['entries','Lançamentos',p.es.length]
+  ];
+  cashStats.innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div><div class="small">'+from+' → '+to+'</div></button>').join('');
+  let es=p.es.slice();
+  if(cashFilter==='services') es=es.filter(e=>entryServiceTotal(e)>0);
+  else if(cashFilter==='products') es=es.filter(e=>entryProductTotal(e)>0);
+  else if(cashFilter==='tips') es=es.filter(e=>Number(e.tip||0)>0);
+  es.sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+  const filterLabel={all:'Todos os lançamentos',services:'Lançamentos com serviços',products:'Lançamentos com produtos',tips:'Lançamentos com caixinha',entries:'Todos os lançamentos'}[cashFilter]||'Todos os lançamentos';
+  const rows=es.map(e=>'<tr><td>'+e.date+' '+e.time+'</td><td>'+barberName(e.barber)+'</td><td>'+(e.service||'—')+'</td><td>'+(e.productName||'—')+'</td><td>'+(e.servicePayment||e.payment||'—')+'</td><td>'+money(e.tip||0)+'</td><td>'+(e.tipPayment||'—')+'</td><td><b>'+money(entryTotal(e))+'</b></td><td><button onclick="openEntry('+e.id+')">Editar</button> <button class="danger" onclick="delEntry('+e.id+')">Excluir</button></td></tr>').join('');
+  entryList.innerHTML='<tr><td colspan="9" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s)</td></tr>'+rows;
 }
-
 function renderCommissions(){
   const from=document.getElementById('commFrom')?.value||'';
   const to=document.getElementById('commTo')?.value||'';
