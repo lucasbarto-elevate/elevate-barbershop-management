@@ -785,98 +785,155 @@ function delService(id){if(confirm('Excluir serviço?')){db.services=db.services
 function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',stock:0,cost:0,price:0,min:2,commission:0};openModal(id?'Editar produto':'Novo produto',`<div class="formgrid"><div><label>Produto</label><input id="fName" value="${p.name}"></div><div><label>Estoque</label><input id="fStock" type="number" value="${p.stock}"></div><div><label>Custo</label><input id="fCost" type="number" step=".01" value="${p.cost}"></div><div><label>Preço de venda</label><input id="fPrice" type="number" step=".01" value="${p.price}"></div><div><label>Comissão do barbeiro por unidade (€)</label><input id="fProdComm" type="number" min="0" step=".01" value="${p.commission||0}"></div><div><label>Estoque mínimo</label><input id="fMin" type="number" value="${p.min}"></div></div><br><button class="primary" onclick="saveProduct(${id||0})">Salvar</button>`)}
 function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save()}
 function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save()}}
+let entryEditState=null;
 function openEntry(id){
   const e=db.entries.find(x=>String(x.id)===String(id))||{
     id:null,date:localDate(),time:new Date().toTimeString().slice(0,5),
-    barber:db.barbers[0]?.id||0,payment:'Cash',servicePayment:'Cash',
-    productPayment:'Cash',tip:0,tipPayment:'Cash',clients:1
+    barber:db.barbers[0]?.id||0,clients:1,payment:'Cash',servicePayment:'Cash',
+    productPayment:'Cash',tip:0,tipPayment:'Cash'
   };
-  const services=getServiceItems(e), products=getProductItems(e);
-  const firstService=services[0], firstProduct=products[0];
-  const servicePayment=e.servicePayment||e.payment||'Cash';
-  const productPayment=e.productPayment||'Cash';
-  const serviceUnit=Number(firstService?.unitPrice ?? db.services.find(s=>s.id==firstService?.id)?.price ?? 0);
-  const productUnit=Number(firstProduct?.unitPrice ?? db.products.find(p=>p.id==firstProduct?.id)?.price ?? 0);
+  entryEditState={
+    id:id||null,date:e.date||localDate(),time:e.time||'00:00',barber:e.barber,
+    clients:Number(e.clients||0),servicePayment:e.servicePayment||e.payment||'Cash',
+    productPayment:e.productPayment||'Cash',tip:Number(e.tip||0),tipPayment:e.tipPayment||'Cash',
+    services:getServiceItems(e).map(x=>({id:x.id||null,qty:Number(x.qty||1),unitPrice:Number(x.unitPrice||0)})),
+    products:getProductItems(e).map(x=>({id:x.id||null,qty:Number(x.qty||1),unitPrice:Number(x.unitPrice||0),commission:Number(x.commission||0)}))
+  };
   openModal(id?'Editar lançamento':'Novo lançamento',`
     <div class="formgrid">
-      <div><label>Data</label><input id="fDate" type="date" value="${e.date||localDate()}"></div>
-      <div><label>Hora</label><input id="fTime" type="time" value="${e.time||'00:00'}"></div>
-      <div><label>Barbeiro</label><select id="fBarber" onchange="updateEntryEditPreview()">${db.barbers.map(b=>`<option value="${b.id}" ${String(b.id)===String(e.barber)?'selected':''}>${b.name}</option>`).join('')}</select></div>
-      <div><label>Serviço</label><select id="fService" onchange="editServiceChanged()">
-        <option value="">Nenhum</option>
-        ${db.services.map(s=>`<option value="${s.id}" ${String(s.id)===String(firstService?.id)?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}
-      </select></div>
-      <div><label>Quantidade de serviços</label><input id="fServiceQty" type="number" min="1" step="1" value="${firstService?.qty||1}" oninput="updateEntryEditPreview()"></div>
-      <div><label>Valor por serviço (€)</label><input id="fServiceValue" type="number" min="0" step=".01" value="${serviceUnit.toFixed(2)}" oninput="updateEntryEditPreview()"></div>
-      <div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===servicePayment?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div><label>Produto</label><select id="fProduct" onchange="editProductChanged()"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(firstProduct?.id)?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div>
-      <div><label>Quantidade de produtos</label><input id="fProductQty" type="number" min="1" step="1" value="${firstProduct?.qty||1}" oninput="updateEntryEditPreview()"></div>
-      <div><label>Valor por produto (€)</label><input id="fProductValue" type="number" min="0" step=".01" value="${productUnit.toFixed(2)}" oninput="updateEntryEditPreview()"></div>
-      <div><label>Pagamento do produto</label><select id="fProductPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===productPayment?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div><label>Gorjeta / Caixinha (€)</label><input id="fTip" type="number" min="0" step=".01" value="${Number(e.tip||0).toFixed(2)}" oninput="updateEntryEditPreview()"></div>
-      <div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div><label>Data</label><input id="fDate" type="date" value="${entryEditState.date}"></div>
+      <div><label>Hora</label><input id="fTime" type="time" value="${entryEditState.time}"></div>
+      <div><label>Barbeiro</label><select id="fBarber" onchange="updateEntryEditPreview()">${db.barbers.map(b=>`<option value="${b.id}" ${String(b.id)===String(entryEditState.barber)?'selected':''}>${b.name}</option>`).join('')}</select></div>
+      <div><label>Clientes</label><input id="fClients" type="number" min="0" step="1" value="${entryEditState.clients}" oninput="updateEntryEditPreview()"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="bar"><strong>Serviços</strong><button type="button" onclick="addEditServiceRow()">+ Adicionar serviço</button></div>
+      <div id="editServiceRows" style="margin-top:10px"></div>
+      <label>Pagamento dos serviços</label>
+      <select id="fPay" onchange="updateEntryEditPreview()">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===entryEditState.servicePayment?'selected':''}>${x}</option>`).join('')}</select>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="bar"><strong>Produtos</strong><button type="button" onclick="addEditProductRow()">+ Adicionar produto</button></div>
+      <div id="editProductRows" style="margin-top:10px"></div>
+      <label>Pagamento dos produtos</label>
+      <select id="fProductPay" onchange="updateEntryEditPreview()">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===entryEditState.productPayment?'selected':''}>${x}</option>`).join('')}</select>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <label>Gorjeta / Caixinha (€)</label>
+      <input id="fTip" type="number" min="0" step=".01" value="${entryEditState.tip.toFixed(2)}" oninput="updateEntryEditPreview()">
+      <label>Pagamento da caixinha</label>
+      <select id="fTipPay" onchange="updateEntryEditPreview()">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===entryEditState.tipPayment?'selected':''}>${x}</option>`).join('')}</select>
     </div>
     <div id="editTotalPreview" class="card" style="margin-top:14px;background:#f8f8f8"></div>
-    <div class="small" style="margin-top:10px">A edição altera separadamente serviço, produto, quantidades, pagamentos e caixinha. O total é recalculado automaticamente.</div>
-    <br><button class="primary" onclick="saveEntry(${id||0})">Salvar alterações</button>`
+    <div class="small" style="margin-top:10px">Você pode editar vários serviços e vários produtos no mesmo lançamento. O preço do catálogo é preenchido automaticamente quando você troca o item, mas o valor desta venda continua editável.</div>
+    <br><button class="primary" style="width:100%" onclick="saveEntry(${id||0})">Salvar alterações</button>`
   );
+  renderEntryEditRows();
   updateEntryEditPreview();
 }
-function editServiceChanged(){const s=document.getElementById('fService'),v=document.getElementById('fServiceValue');const x=db.services.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}
-function editProductChanged(){const s=document.getElementById('fProduct'),v=document.getElementById('fProductValue');const x=db.products.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}
+function renderEntryEditRows(){
+  const sr=document.getElementById('editServiceRows'), pr=document.getElementById('editProductRows');
+  if(sr) sr.innerHTML=entryEditState.services.length?entryEditState.services.map((x,i)=>`
+    <div class="card" style="margin-bottom:8px;padding:12px">
+      <div class="formgrid">
+        <div><label>Serviço</label><select id="editServiceId${i}" onchange="editServiceRowChanged(${i})"><option value="">Nenhum</option>${db.services.map(s=>`<option value="${s.id}" ${String(s.id)===String(x.id)?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}</select></div>
+        <div><label>Quantidade</label><input id="editServiceQty${i}" type="number" min="1" step="1" value="${Math.max(1,x.qty||1)}" oninput="updateEntryEditPreview()"></div>
+        <div><label>Valor unitário (€)</label><input id="editServiceValue${i}" type="number" min="0" step=".01" value="${Number(x.unitPrice||0).toFixed(2)}" oninput="updateEntryEditPreview()"></div>
+        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditServiceRow(${i})">Remover</button></div>
+      </div>
+    </div>`).join(''):'<div class="small">Nenhum serviço neste lançamento.</div>';
+  if(pr) pr.innerHTML=entryEditState.products.length?entryEditState.products.map((x,i)=>`
+    <div class="card" style="margin-bottom:8px;padding:12px">
+      <div class="formgrid">
+        <div><label>Produto</label><select id="editProductId${i}" onchange="editProductRowChanged(${i})"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(x.id)?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div>
+        <div><label>Quantidade</label><input id="editProductQty${i}" type="number" min="1" step="1" value="${Math.max(1,x.qty||1)}" oninput="updateEntryEditPreview()"></div>
+        <div><label>Valor unitário (€)</label><input id="editProductValue${i}" type="number" min="0" step=".01" value="${Number(x.unitPrice||0).toFixed(2)}" oninput="updateEntryEditPreview()"></div>
+        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditProductRow(${i})">Remover</button></div>
+      </div>
+    </div>`).join(''):'<div class="small">Nenhum produto neste lançamento.</div>';
+}
+function addEditServiceRow(){
+  entryEditState.services.push({id:null,qty:1,unitPrice:0});
+  renderEntryEditRows();updateEntryEditPreview();
+}
+function removeEditServiceRow(i){
+  entryEditState.services.splice(i,1);
+  renderEntryEditRows();updateEntryEditPreview();
+}
+function addEditProductRow(){
+  entryEditState.products.push({id:null,qty:1,unitPrice:0,commission:0});
+  renderEntryEditRows();updateEntryEditPreview();
+}
+function removeEditProductRow(i){
+  entryEditState.products.splice(i,1);
+  renderEntryEditRows();updateEntryEditPreview();
+}
+function editServiceRowChanged(i){
+  const id=document.getElementById('editServiceId'+i)?.value;
+  const x=db.services.find(s=>String(s.id)===String(id));
+  if(entryEditState.services[i]){
+    entryEditState.services[i].id=id?Number(id):null;
+    entryEditState.services[i].unitPrice=x?Number(x.price||0):0;
+  }
+  renderEntryEditRows();updateEntryEditPreview();
+}
+function editProductRowChanged(i){
+  const id=document.getElementById('editProductId'+i)?.value;
+  const x=db.products.find(p=>String(p.id)===String(id));
+  if(entryEditState.products[i]){
+    entryEditState.products[i].id=id?Number(id):null;
+    entryEditState.products[i].unitPrice=x?Number(x.price||0):0;
+    entryEditState.products[i].commission=x?Number(x.commission||0):0;
+  }
+  renderEntryEditRows();updateEntryEditPreview();
+}
+function readEntryEditRows(){
+  const services=entryEditState.services.map((x,i)=>({
+    id:Number(document.getElementById('editServiceId'+i)?.value||0)||null,
+    qty:Math.max(1,Math.floor(Number(document.getElementById('editServiceQty'+i)?.value||1))),
+    unitPrice:Math.max(0,Number(document.getElementById('editServiceValue'+i)?.value||0))
+  })).filter(x=>x.id);
+  const products=entryEditState.products.map((x,i)=>{
+    const id=Number(document.getElementById('editProductId'+i)?.value||0)||null;
+    const p=db.products.find(a=>Number(a.id)===id);
+    return {id,qty:Math.max(1,Math.floor(Number(document.getElementById('editProductQty'+i)?.value||1))),unitPrice:Math.max(0,Number(document.getElementById('editProductValue'+i)?.value||0)),commission:Number(p?.commission||x.commission||0)};
+  }).filter(x=>x.id);
+  return {services,products};
+}
 function updateEntryEditPreview(){
-  const g=id=>document.getElementById(id);
-  const sq=Math.max(0,Number(g('fServiceQty')?.value||0)), sv=Math.max(0,Number(g('fServiceValue')?.value||0));
-  const pq=Math.max(0,Number(g('fProductQty')?.value||0)), pv=Math.max(0,Number(g('fProductValue')?.value||0));
-  const tip=Math.max(0,Number(g('fTip')?.value||0));
-  const serviceName=g('fService')?.selectedOptions?.[0]?.textContent||'Nenhum';
-  const productName=g('fProduct')?.selectedOptions?.[0]?.textContent||'Nenhum';
-  const st=g('fService')?.value?sq*sv:0, pt=g('fProduct')?.value?pq*pv:0;
-  const el=g('editTotalPreview'); if(el) el.innerHTML=`<b>Resumo</b><div class="small">${serviceName}: ${sq}× ${money(sv)} = <b>${money(st)}</b></div><div class="small">${productName}: ${g('fProduct')?.value?pq+'× '+money(pv)+' = '+money(pt):'Nenhum'}</div><div class="small">Caixinha: ${money(tip)}</div><div style="margin-top:6px"><b>Total: ${money(st+pt)}</b></div>`;
+  if(!entryEditState)return;
+  const get=x=>document.getElementById(x);
+  const rows=readEntryEditRows();
+  const st=rows.services.reduce((s,x)=>s+x.qty*x.unitPrice,0);
+  const pt=rows.products.reduce((s,x)=>s+x.qty*x.unitPrice,0);
+  const tip=Math.max(0,Number(get('fTip')?.value||0));
+  const clients=Math.max(0,Math.floor(Number(get('fClients')?.value||0)));
+  const el=get('editTotalPreview');
+  if(el) el.innerHTML=`<b>Resumo do lançamento</b>
+    <div class="small">Serviços: ${rows.services.length?rows.services.map(x=>{const s=db.services.find(a=>a.id===x.id);return `${x.qty}× ${s?.name||'Serviço'} — ${money(x.qty*x.unitPrice)}`}).join(' · '):'Nenhum'}</div>
+    <div class="small">Clientes: ${clients}</div>
+    <div class="small">Produtos: ${rows.products.length?rows.products.map(x=>{const p=db.products.find(a=>a.id===x.id);return `${x.qty}× ${p?.name||'Produto'} — ${money(x.qty*x.unitPrice)}`}).join(' · '):'Nenhum'}</div>
+    <div class="small">Caixinha: ${money(tip)}</div>
+    <div style="margin-top:6px"><b>Total: ${money(st+pt)}</b></div>`;
 }
-function productQtyMapForEntry(e){
-  const map=new Map();
-  for(const x of getProductItems(e)){
-    const id=String(x.id||'');
-    const qty=Number(x.qty||1);
-    if(id && qty>0) map.set(id,(map.get(id)||0)+qty);
-  }
-  return map;
-}
-function adjustLocalStockForEntryChange(oldEntry,newEntry){
-  const oldQ=productQtyMapForEntry(oldEntry), newQ=productQtyMapForEntry(newEntry);
-  const ids=new Set([...oldQ.keys(),...newQ.keys()]);
-  for(const id of ids){
-    const oldQty=oldQ.get(id)||0, newQty=newQ.get(id)||0;
-    const delta=oldQty-newQty;
-    if(!delta) continue;
-    const p=db.products.find(x=>String(x.id)===id);
-    if(!p) throw new Error('Produto não encontrado: '+id);
-    const next=Number(p.stock||0)+delta;
-    if(next<0) throw new Error('Estoque insuficiente para '+(p.name||id));
-    p.stock=next;
-  }
-}
+function editServiceChanged(){updateEntryEditPreview()}
+function editProductChanged(){updateEntryEditPreview()}
 function saveEntry(id){
   const old=db.entries.find(x=>String(x.id)===String(id))||null;
   const get=x=>document.getElementById(x);
+  const rows=readEntryEditRows();
   const date=get('fDate')?.value||localDate(), time=get('fTime')?.value||new Date().toTimeString().slice(0,5);
   const barber=Number(get('fBarber')?.value||0);
   if(!db.barbers.some(b=>String(b.id)===String(barber))) return alert('Selecione um barbeiro válido.');
-  const serviceId=Number(get('fService')?.value||0)||null, productId=Number(get('fProduct')?.value||0)||null;
-  const service=db.services.find(s=>Number(s.id)===serviceId), product=db.products.find(p=>Number(p.id)===productId);
-  const sq=Math.max(1,Math.floor(Number(get('fServiceQty')?.value||1)));
-  const sv=Math.max(0,Number(get('fServiceValue')?.value||0));
-  const pq=Math.max(1,Math.floor(Number(get('fProductQty')?.value||1)));
-  const pv=Math.max(0,Number(get('fProductValue')?.value||0));
+  const clients=rows.services.length?Math.max(1,Math.floor(Number(get('fClients')?.value||1))):0;
+  if(rows.services.length && clients>rows.services.reduce((a,x)=>a+x.qty,0)) return alert('O número de clientes não pode ser maior que a quantidade de serviços.');
+  const serviceItems=rows.services.map(x=>{const s=db.services.find(a=>Number(a.id)===Number(x.id));return {id:s.id,name:s.name,qty:x.qty,unitPrice:x.unitPrice}});
+  const productItems=rows.products.map(x=>{const p=db.products.find(a=>Number(a.id)===Number(x.id));return {id:p.id,name:p.name,qty:x.qty,unitPrice:x.unitPrice,commission:Number(p.commission||0)}});
+  const serviceTotal=serviceItems.reduce((sum,x)=>sum+x.qty*x.unitPrice,0);
+  const productTotal=productItems.reduce((sum,x)=>sum+x.qty*x.unitPrice,0);
   const tip=Math.max(0,Number(get('fTip')?.value||0));
-  const serviceItems=service?[{id:service.id,name:service.name,qty:sq,unitPrice:sv}]:[];
-  const productItems=product?[{id:product.id,name:product.name,qty:pq,unitPrice:pv,commission:Number(product.commission||0)}]:[];
-  const serviceTotal=serviceItems.reduce((sum,x)=>sum+Number(x.qty)*Number(x.unitPrice),0);
-  const productTotal=productItems.reduce((sum,x)=>sum+Number(x.qty)*Number(x.unitPrice),0);
   const o={
-    id:id||Date.now(),date,time,barber,
-    clients:serviceItems.length?Math.max(1,Number(old?.clients||1)):0,
+    id:id||Date.now(),date,time,barber,clients,
     service:serviceItems.map(x=>`${x.qty}× ${x.name}`).join(' + '),serviceItems,
     productId:productItems.length===1?productItems[0].id:null,
     productName:productItems.map(x=>`${x.qty}× ${x.name}`).join(' + '),productPrice:productTotal,productItems,
@@ -885,18 +942,12 @@ function saveEntry(id){
     productPayment:productItems.length?get('fProductPay').value:null,
     tip,tipPayment:tip>0?get('fTipPay').value:null,total:serviceTotal+productTotal
   };
-  try{
-    adjustLocalStockForEntryChange(old,o);
-  }catch(err){
-    return alert(err.message||'Não foi possível atualizar o estoque.');
-  }
+  if(!serviceItems.length&&!productItems.length)return alert('Selecione pelo menos um serviço ou produto.');
+  try{adjustLocalStockForEntryChange(old,o)}catch(err){return alert(err.message||'Não foi possível atualizar o estoque.')}
   const i=db.entries.findIndex(x=>String(x.id)===String(id));
   if(i>=0) db.entries[i]=o; else db.entries.push(o);
   localStorage.setItem(key,JSON.stringify(db));
-  render();
-  closeModal();
-  queueSync({id:o.id});
-  setTimeout(()=>updateEntryEditPreview(),0);
+  render();closeModal();queueSync({id:o.id});
 }
 function delEntry(id){
   const entry=db.entries.find(x=>String(x.id)===String(id));
