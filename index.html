@@ -590,26 +590,42 @@ function requestStockNotifications(){
 }
 
 function renderProducts(){productList.innerHTML=db.products.map(p=>`<tr><td><b>${p.name}</b></td><td>${p.stock}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td><td>${money(p.commission||0)}</td><td><span class="badge">${p.stock<=p.min?'Estoque baixo':'Normal'}</span></td><td><button onclick="openProduct(${p.id})">Editar</button> <button class="danger" onclick="delProduct(${p.id})">Excluir</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto cadastrado ainda.</td></tr>'}
+function dateOnlyAdd(dateStr,days){
+  const parts=dateStr.split('-').map(Number);
+  const d=new Date(parts[0],parts[1]-1,parts[2]+days,12,0,0);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function cashDateRange(type){
-  const d=new Date(localDate()+'T12:00:00');
-  let from,to;
-  if(type==='today'){from=to=localDate();}
-  else if(type==='week'){
-    const day=d.getDay(), diff=day===0?-6:1-day;
-    const a=new Date(d); a.setDate(a.getDate()+diff);
-    const b=new Date(a); b.setDate(b.getDate()+6);
-    from=localDate(a); to=localDate(b);
-  } else if(type==='month'){
-    const a=new Date(d.getFullYear(),d.getMonth(),1), b=new Date(d.getFullYear(),d.getMonth()+1,0);
-    from=localDate(a); to=localDate(b);
-  } else {
-    from=d.getFullYear()+'-01-01'; to=d.getFullYear()+'-12-31';
+  const today=localDate();
+  const p=today.split('-').map(Number);
+  const d=new Date(p[0],p[1]-1,p[2],12,0,0);
+  let from=today,to=today;
+  if(type==='today'){
+    from=to=today;
+  }else if(type==='week'){
+    // Semana de segunda a domingo, sem depender do fuso horário.
+    const jsDay=d.getDay(); // 0=domingo
+    const mondayOffset=jsDay===0?-6:1-jsDay;
+    from=dateOnlyAdd(today,mondayOffset);
+    to=dateOnlyAdd(from,6);
+  }else if(type==='month'){
+    from=p[0]+'-'+String(p[1]).padStart(2,'0')+'-01';
+    const last=new Date(p[0],p[1],0,12,0,0);
+    to=last.getFullYear()+'-'+String(last.getMonth()+1).padStart(2,'0')+'-'+String(last.getDate()).padStart(2,'0');
+  }else if(type==='year'){
+    from=p[0]+'-01-01';
+    to=p[0]+'-12-31';
   }
   return {from,to};
 }
+let cashPeriod='today';
 function setCashPeriod(type){
+  cashPeriod=type;
   const r=cashDateRange(type);
-  cashFrom.value=r.from; cashTo.value=r.to;
+  const fromEl=document.getElementById('cashFrom');
+  const toEl=document.getElementById('cashTo');
+  if(fromEl) fromEl.value=r.from;
+  if(toEl) toEl.value=r.to;
   renderCash();
 }
 function cashPeriodStats(from,to){
