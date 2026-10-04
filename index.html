@@ -273,19 +273,42 @@ function isShopBarber(b){return !!b && (b.id===4 || b.name==='Elevate Barbershop
 function barberServiceCommissionRate(b){return isShopBarber(b)?0:Number(b?.commission||0);}
 
 let remoteLoaded=false;
+let syncInFlight=false;
+let syncRetryTimer=null;
 async function syncRemoteNow(){
  if(!navigator.onLine) { updateConnectionStatus(); return false; }
+ if(syncInFlight) return false;
+ if(!pendingSync.length){ updateConnectionStatus(); return true; }
+ syncInFlight=true;
  try{
    const payload=pendingSync.map(id=>db.entries.find(e=>String(e.id)===String(id))).filter(Boolean);
-   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:payload,catalog:{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}})});
+   if(!payload.length){ pendingSync=[]; localStorage.setItem(syncKey,'[]'); updateConnectionStatus(); return true; }
+   const controller=new AbortController();
+   const timeout=setTimeout(()=>controller.abort(),8000);
+   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:payload,catalog:{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}}),signal:controller.signal});
+   clearTimeout(timeout);
    if(!r.ok) throw new Error('sync');
    const out=await r.json();
    if(out.db){ db=out.db; localStorage.setItem(key,JSON.stringify(db)); }
    pendingSync=[]; localStorage.setItem(syncKey,'[]'); updateConnectionStatus(); render(); return true;
- }catch(e){ updateConnectionStatus(); return false; }
+ }catch(e){
+   updateConnectionStatus();
+   if(navigator.onLine && !syncRetryTimer){
+     syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;syncRemoteNow();},3000);
+   }
+   return false;
+ }finally{ syncInFlight=false; }
 }
-function save(){localStorage.setItem(key,JSON.stringify(db));localStorage.setItem(syncKey,JSON.stringify(pendingSync));render();updateConnectionStatus();if(navigator.onLine)syncRemoteNow();}
-function queueSync(entry){if(!pendingSync.includes(entry.id))pendingSync.push(entry.id);localStorage.setItem(syncKey,JSON.stringify(pendingSync));}
+function save(){
+ localStorage.setItem(key,JSON.stringify(db));localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+ render();updateConnectionStatus();
+ if(navigator.onLine && pendingSync.length) syncRemoteNow();
+}
+function queueSync(entry){
+ if(!pendingSync.includes(entry.id)) pendingSync.push(entry.id);
+ localStorage.setItem(syncKey,JSON.stringify(pendingSync)); updateConnectionStatus();
+ if(navigator.onLine) syncRemoteNow();
+}
 async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
 async function loadRemote(){
  if(!navigator.onLine) { updateConnectionStatus(); return; }
