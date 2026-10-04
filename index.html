@@ -312,6 +312,7 @@ function queueSync(entry){
 async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
 async function loadRemote(){
  if(!navigator.onLine) { updateConnectionStatus(); return; }
+ if(syncInFlight || pendingSync.length){ updateConnectionStatus(); return; }
  try{
    const r=await fetch('/api/data',{cache:'no-store'}); if(!r.ok) throw new Error('data');
    const remote=await r.json();
@@ -369,8 +370,8 @@ function renderRevenueHistory(){
   if(!s||!e||!revenueHistory)return;
   const selectedBarber=revBarber?.value||'all';
   const es=db.entries.filter(x=>x.date>=s&&x.date<=e&&(selectedBarber==='all'||String(x.barber)===String(selectedBarber)));
-  const services=es.reduce((a,x)=>a+Number(x.total||0)-Number(x.productPrice||0),0);
-  const products=es.reduce((a,x)=>a+Number(x.productPrice||0),0);
+  const services=es.reduce((a,x)=>a+entryServiceTotal(x),0);
+  const products=es.reduce((a,x)=>a+entryProductTotal(x),0);
   const tips=es.reduce((a,x)=>a+Number(x.tip||0),0);
   const total=services+products;
   revenueHistorySummary.innerHTML=[
@@ -380,8 +381,8 @@ function renderRevenueHistory(){
   // Detailed launch list grouped by barber, with the same information recorded on the iPad.
   const barberGroups=db.barbers.map(b=>[b,es.filter(x=>String(x.barber)===String(b.id))]).filter(x=>x[1].length);
   revenueBarberDetails.innerHTML=barberGroups.length ? barberGroups.map(([b,list])=>{
-    const st=list.reduce((a,x)=>a+Number(x.total||0)-Number(x.productPrice||0),0);
-    const pt=list.reduce((a,x)=>a+Number(x.productPrice||0),0);
+    const st=list.reduce((a,x)=>a+entryServiceTotal(x),0);
+    const pt=list.reduce((a,x)=>a+entryProductTotal(x),0);
     const tt=list.reduce((a,x)=>a+Number(x.tip||0),0);
     const sc=st*barberServiceCommissionRate(b)/100;
     const pc=isShopBarber(b)?0:list.reduce((a,x)=>a+entryProductCommission(x),0);
@@ -522,7 +523,7 @@ const serviceRevenueToday=today.reduce((s,e)=>s+entryServiceTotal(e),0);
   const clientsToday=today.reduce((a,e)=>a+entryClients(e),0);
   const serviceQtyToday=today.reduce((a,e)=>a+entryServiceQty(e),0);
   const productQtyToday=today.reduce((a,e)=>a+entryProductQty(e),0);
-  stats.innerHTML=[['Faturamento hoje',money(rev)],['Parte da barbearia',money(shopShareToday)],['Gorjetas',money(tips)],['Clientes hoje',clientsToday],['Serviços vendidos hoje',serviceQtyToday],['Produtos vendidos hoje',productQtyToday],['Barbeiros',db.barbers.length],['Cash',money(today.filter(e=>e.payment==='Cash').reduce((s,e)=>s+entryTotal(e),0))],['Revolut',money(today.filter(e=>e.payment==='Revolut').reduce((s,e)=>s+entryTotal(e),0))],['SumUp',money(today.filter(e=>e.payment==='SumUp').reduce((s,e)=>s+entryTotal(e),0))]].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');
+  stats.innerHTML=[['Faturamento hoje',money(rev)],['Parte da barbearia',money(shopShareToday)],['Gorjetas',money(tips)],['Clientes hoje',clientsToday],['Serviços vendidos hoje',serviceQtyToday],['Produtos vendidos hoje',productQtyToday],['Barbeiros',db.barbers.length],['Cash',money(today.reduce((s,e)=>s+paymentTotal(e,'Cash'),0))],['Revolut',money(today.reduce((s,e)=>s+paymentTotal(e,'Revolut'),0))],['SumUp',money(today.reduce((s,e)=>s+paymentTotal(e,'SumUp'),0))]].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');
 barberCards.innerHTML=db.barbers.map(b=>{let es=today.filter(e=>e.barber==b.id),r=es.reduce((s,e)=>s+entryTotal(e),0),t=es.reduce((s,e)=>s+Number(e.tip||0),0),serviceRevenue=es.reduce((s,e)=>s+entryServiceTotal(e),0),serviceComm=serviceRevenue*barberServiceCommissionRate(b)/100,productSales=es.reduce((s,e)=>s+entryProductTotal(e),0),productComm=es.reduce((s,e)=>s+entryProductCommission(e),0),totalComm=serviceComm+productComm,shopShare=serviceRevenue+productSales-totalComm+(isShopBarber(b)?t:0);return `<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small"><b>Lançamentos:</b> ${es.length} · <b>Clientes:</b> ${es.reduce((a,e)=>a+entryClients(e),0)}</p><p class="small"><b>Serviços vendidos:</b> ${entryQtySum(es,'service')}</p><p class="small"><b>Produtos vendidos:</b> ${entryQtySum(es,'product')}</p><p class="small"><b>Valor serviços:</b> ${money(serviceRevenue)} · <b>Valor produtos:</b> ${money(productSales)}</p><p class="small"><b>Caixinhas:</b> ${money(t)}</p><div class="value">${money(r+t)}</div><p class="small">Comissão serviços: <b>${money(serviceComm)}</b> · Comissão produtos: <b>${money(productComm)}</b></p><p class="small">Total comissão: <b>${money(totalComm)}</b></p><p class="small"><b>Parte da barbearia:</b> ${money(shopShare)}</p></div>`}).join('')
 }
 function renderTeam(){teamList.innerHTML=db.barbers.map(b=>`<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small">${isShopBarber(b)?'Comissão: 0% — 100% da receita fica para a barbearia':`Comissão: ${b.commission}%`} · ${db.settings.open}–${db.settings.close}</p><div class="actions"><button onclick="openBarber(${b.id})">Editar</button><button class="danger" onclick="delBarber(${b.id})">Excluir</button></div></div>`).join('')}
@@ -596,7 +597,9 @@ function entryTotal(e){return entryServiceTotal(e)+entryProductTotal(e)}
 function entryProductCommission(e){const b=db.barbers.find(x=>x.id==e.barber);if(isShopBarber(b))return 0;return getProductItems(e).reduce((s,x)=>s+Number(x.qty||1)*Number(x.commission ?? ((db.products.find(p=>p.id==x.id)?.commission)||0)),0)}
 function paymentTotal(e,type){
   const st=entryServiceTotal(e), pt=entryProductTotal(e);
-  return (e.servicePayment||e.payment)===type?st:0 + ((e.productPayment||e.productPay)===type?pt:0)
+  const sp=(e.servicePayment||e.payment);
+  const pp=(e.productPayment||e.productPay);
+  return (sp===type?st:0)+(pp===type?pt:0);
 }
 
 function serviceUnitCountForEntry(e){return getServiceItems(e).reduce((a,x)=>a+Number(x.qty||1),0)}
