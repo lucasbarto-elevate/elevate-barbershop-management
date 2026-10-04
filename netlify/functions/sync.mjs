@@ -21,6 +21,13 @@ async function ensureMigrated(){
       products: source.products || []
     };
     await store.setJSON(CATALOG_KEY,catalog);
+  }else{
+    let changed=false;
+    if(!catalog.settings){catalog.settings=source.settings;changed=true;}
+    if(!Array.isArray(catalog.barbers)||!catalog.barbers.length){catalog.barbers=source.barbers||[];changed=true;}
+    if(!Array.isArray(catalog.services)||!catalog.services.length){catalog.services=source.services||[];changed=true;}
+    if(!Array.isArray(catalog.products)||!catalog.products.length){catalog.products=source.products||[];changed=true;}
+    if(changed) await store.setJSON(CATALOG_KEY,catalog);
   }
 
   // If the catalog exists but the individual launch blobs do not,
