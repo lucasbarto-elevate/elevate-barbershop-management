@@ -442,9 +442,12 @@ function renderHistory(){
       </tr></thead><tbody>${list.map(e=>{
         const sv=Number(e.total||0)-entryProductTotal(e);
         return `<tr>
-          <td>${e.date||'—'}</td><td><b>${e.time||'—'}</b></td><td>${e.service||'—'}</td>
-          <td>${e.productName||'—'}</td><td>${e.payment||'—'}</td><td>${money(sv)}</td><td>${money(e.productPrice||0)}</td>
-          <td>${money(e.tip||0)}</td><td>${e.tip?e.tipPayment||'Cash':'—'}</td><td><b>${money(e.total||0)}</b></td>
+          <td>${e.date||'—'}</td><td><b>${e.time||'—'}</b></td><td>${entryClients(e)||'—'}</td>
+          <td>${getServiceItems(e).map(x=>x.qty+'× '+x.name).join('<br>')||'—'}</td>
+          <td>${getProductItems(e).map(x=>x.qty+'× '+x.name).join('<br>')||'—'}</td>
+          <td>${entryServiceTotal(e)>0?(e.servicePayment||e.payment||'—'):'—'}</td>
+          <td>${money(entryServiceTotal(e))}</td><td>${money(entryProductTotal(e))}</td>
+          <td>${money(e.tip||0)}</td><td>${e.tip?e.tipPayment||'Cash':'—'}</td><td><b>${money(entryTotal(e))}</b></td>
         </tr>`}).join('')}</tbody></table>
       <div class="small" style="margin-top:10px">Serviços: ${money(st)} · Produtos: ${money(pt)} · Caixinhas: ${money(tt)}</div>
     </div>`
