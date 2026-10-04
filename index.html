@@ -248,6 +248,11 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <div class="modal" id="modal"><div class="modalbox"><div class="modalhead"><h2 id="modalTitle"></h2><button onclick="closeModal()">✕</button></div><div id="modalBody"></div></div></div>
 
 <script>
+/* Safari/iPad compatibility: older versions of this app relied on element IDs becoming global variables.
+   Safari does not guarantee that behavior. Create explicit global aliases before the first render. */
+document.querySelectorAll('[id]').forEach(function(el){
+  if(!window[el.id]) window[el.id]=el;
+});
 const key='elevate_barbershop_shared_v6';
 const previousKey='elevate_barbershop_shared_v5';
 const legacyKey='elevate_barbershop_seed_v3';
