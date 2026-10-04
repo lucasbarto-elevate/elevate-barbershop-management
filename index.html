@@ -464,7 +464,7 @@ function renderRevenueHistory(){
     return `<div class="card" style="margin-bottom:12px">
       <div class="bar"><div><h3 style="margin:0">${date}</h3><div class="small">${list.length} lançamento(s)</div></div><strong>${money(st+pt)}</strong></div>
       <div class="small" style="margin-top:8px">Serviços ${money(st)} · Produtos ${money(pt)} · Caixinhas ${money(tt)}</div>
-      <div class="small" style="margin-top:6px">Pagamentos: Cash ${money(list.filter(x=>x.payment==='Cash').reduce((a,x)=>a+Number(x.total||0),0))} · Revolut ${money(list.filter(x=>x.payment==='Revolut').reduce((a,x)=>a+Number(x.total||0),0))} · SumUp ${money(list.filter(x=>x.payment==='SumUp').reduce((a,x)=>a+Number(x.total||0),0))}</div>
+      <div class="small" style="margin-top:6px">Pagamentos: Cash ${money(list.reduce((a,x)=>a+paymentTotal(x,'Cash'),0))} · Revolut ${money(list.reduce((a,x)=>a+paymentTotal(x,'Revolut'),0))} · SumUp ${money(list.reduce((a,x)=>a+paymentTotal(x,'SumUp'),0))}</div>
     </div>`
   }).join('')||'<div class="card"><strong>Nenhum faturamento no período.</strong></div>';
 }
@@ -478,7 +478,7 @@ function renderHistory(){
   let es=db.entries.filter(e=>
     (!date || e.date===date) &&
     (barber==='all' || String(e.barber)===String(barber)) &&
-    (payment==='all' || e.payment===payment || e.tipPayment===payment) &&
+    (payment==='all' || e.payment===payment || e.servicePayment===payment || e.productPayment===payment || e.tipPayment===payment) &&
     (!q || `${e.service||''} ${e.productName||''} ${barberName(e.barber)}`.toLowerCase().includes(q))
   ).sort((a,b)=>`${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
   const serviceTotal=es.reduce((s,e)=>s+Number(e.total||0)-entryProductTotal(e),0);
@@ -693,7 +693,23 @@ function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',s
 function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save()}
 function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save()}}
 function openEntry(id){let e=db.entries.find(x=>x.id==id)||{id:null,date:localDate(),time:new Date().toTimeString().slice(0,5),barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',payment:'Cash',tip:0,total:0};openModal(id?'Editar lançamento':'Novo lançamento',`<div class="formgrid"><div><label>Data</label><input id="fDate" type="date" value="${e.date}"></div><div><label>Hora</label><input id="fTime" type="time" value="${e.time}"></div><div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div><div><label>Serviço</label><select id="fService">${db.services.map(s=>`<option ${s.name===e.service?'selected':''}>${s.name}</option>`).join('')}</select></div><div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===e.payment?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(e.productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div><div><label>Valor</label><input id="fTotal" type="number" step=".01" value="${e.total}"></div><div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${e.tip}"></div><div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div></div><br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`)}
-function saveEntry(id){let o={id:id||Date.now(),date:fDate.value,time:fTime.value,barber:Number(fBarber.value),service:fService.value,payment:fPay.value,productId:fProduct.value?Number(fProduct.value):null,productName:fProduct.value?(db.products.find(p=>p.id==Number(fProduct.value))?.name||''):'',productPrice:fProduct.value?Number(db.products.find(p=>p.id==Number(fProduct.value))?.price||0):0,tip:Number(fTip.value),tipPayment:fTipPay.value,total:Number(fTotal.value)};let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);queueSync({id:o.id});closeModal();save({syncCatalog:false})}
+function saveEntry(id){
+  const old=db.entries.find(x=>x.id==id);
+  const oldProducts=getProductItems(old||{});
+  const barber=Number(fBarber.value);
+  const serviceName=fService.value;
+  const service=db.services.find(s=>s.name===serviceName);
+  const productId=fProduct.value?Number(fProduct.value):null;
+  const product=db.products.find(p=>p.id===productId);
+  const tip=Number(fTip.value||0);
+  const serviceTotal=service?Number(fTotal.value||0)-Number(product?.price||0):0;
+  const productTotal=product?Number(product.price||0):0;
+  const serviceItems=service?[{id:service.id,name:service.name,qty:1,unitPrice:Number(serviceTotal>0?serviceTotal:service.price)}]:[];
+  const productItems=product?[{id:product.id,name:product.name,qty:1,unitPrice:Number(product.price||0),commission:Number(product.commission||0)}]:[];
+  const o={id:id||Date.now(),date:fDate.value,time:fTime.value,barber,clients:serviceItems.length?Number(old?.clients||1):0,service:serviceItems.map(x=>`${x.qty}× ${x.name}`).join(''),serviceItems,productId:product?.id||null,productName:product?.name||'',productPrice:productTotal,productItems,payment:fPay.value,servicePayment:serviceItems.length?fPay.value:null,productPayment:productItems.length?(old?.productPayment||fPay.value):null,tip,tipPayment:tip?fTipPay.value:null,total:serviceItems.reduce((a,x)=>a+x.qty*x.unitPrice,0)+productTotal};
+  let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);
+  queueSync({id:o.id});closeModal();save({syncCatalog:false})
+}
 function delEntry(id){if(confirm('Excluir lançamento?')){db.entries=db.entries.filter(x=>x.id!=id);queueDelete(id);save({syncCatalog:false})}}
 function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
 function filterCash(type){show('cash');if(type==='today')alert('Filtro de hoje aplicado no MVP. A versão online terá filtros por dia, semana, mês e período personalizado.')}
@@ -706,7 +722,10 @@ function getServiceItems(e){
 }
 function getProductItems(e){
   if(Array.isArray(e.productItems)) return e.productItems;
-  return e.productId ? [{id:e.productId,name:e.productName||'',qty:1,unitPrice:entryProductTotal(e),commission:Number((db.products.find(p=>p.id==e.productId)?.commission)||0)}] : [];
+  if(!e.productId) return [];
+  const p=db.products.find(x=>x.id==e.productId);
+  const unitPrice=Number(e.productPrice ?? p?.price ?? 0);
+  return [{id:e.productId,name:e.productName||p?.name||'',qty:1,unitPrice,commission:Number(p?.commission||0)}];
 }
 function entryServiceTotal(e){return getServiceItems(e).reduce((s,x)=>s+Number(x.qty||1)*Number(x.unitPrice||0),0)}
 function entryProductTotal(e){return getProductItems(e).reduce((s,x)=>s+Number(x.qty||1)*Number(x.unitPrice||0),0)}
