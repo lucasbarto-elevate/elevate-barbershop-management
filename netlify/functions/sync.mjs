@@ -10,18 +10,26 @@ function cloneSeed(){ return structuredClone(seed); }
 
 async function ensureMigrated(){
   let catalog = await store.get(CATALOG_KEY, { type:'json' });
-  if(catalog) return catalog;
   const legacy = await store.get(LEGACY_KEY, { type:'json' });
   const source = legacy || cloneSeed();
-  catalog = {
-    settings: source.settings,
-    barbers: source.barbers || [],
-    services: source.services || [],
-    products: source.products || []
-  };
-  await store.setJSON(CATALOG_KEY,catalog);
-  for(const entry of (source.entries || [])){
-    await store.setJSON(`${ENTRY_PREFIX}${String(entry.id)}`, entry);
+
+  if(!catalog){
+    catalog = {
+      settings: source.settings,
+      barbers: source.barbers || [],
+      services: source.services || [],
+      products: source.products || []
+    };
+    await store.setJSON(CATALOG_KEY,catalog);
+  }
+
+  // If the catalog exists but the individual launch blobs do not,
+  // restore the legacy/seed launches without overwriting existing ones.
+  const existing = await store.list({ prefix: ENTRY_PREFIX });
+  if(!existing.blobs?.length){
+    for(const entry of (source.entries || [])){
+      await store.setJSON(`${ENTRY_PREFIX}${String(entry.id)}`, entry, { onlyIfNew:true });
+    }
   }
   return catalog;
 }
