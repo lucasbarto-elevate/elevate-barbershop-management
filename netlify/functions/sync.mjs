@@ -1,7 +1,7 @@
 import { getStore } from '@netlify/blobs';
 import { seed } from './_seed.mjs';
 
-const store = getStore('elevate-db');
+const store = getStore({ name:'elevate-db', consistency:'strong' });
 const CATALOG_KEY = 'catalog';
 const LEGACY_KEY = 'database';
 const ENTRY_PREFIX = 'entries/';
