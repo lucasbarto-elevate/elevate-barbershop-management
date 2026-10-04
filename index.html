@@ -636,8 +636,8 @@ function renderCash(){
   ];
   cashStats.innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div><div class="small">'+from+' → '+to+'</div></button>').join('');
   let es=p.es.slice();
-  if(cashFilter==='services') es=es.filter(e=>entryServiceTotal(e)>0);
-  else if(cashFilter==='products') es=es.filter(e=>entryProductTotal(e)>0);
+  if(cashFilter==='services') es=es.filter(e=>entryServiceTotal(e)>0 || !!e.service || (Array.isArray(e.serviceItems)&&e.serviceItems.length));
+  else if(cashFilter==='products') es=es.filter(e=>entryProductTotal(e)>0 || !!e.productId || !!e.productName || (Array.isArray(e.productItems)&&e.productItems.length));
   else if(cashFilter==='tips') es=es.filter(e=>Number(e.tip||0)>0);
   es.sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   const filterLabel={all:'Todos os lançamentos',services:'Lançamentos com serviços',products:'Lançamentos com produtos',tips:'Lançamentos com caixinha',entries:'Todos os lançamentos'}[cashFilter]||'Todos os lançamentos';
