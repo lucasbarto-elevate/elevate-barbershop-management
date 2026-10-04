@@ -226,7 +226,11 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 const key='elevate_barbershop_shared_v5';
 const legacyKey='elevate_barbershop_seed_v3';
 const syncKey='elevate_barbershop_pending_sync_v1';
+const catalogSyncKey='elevate_barbershop_catalog_dirty_v1';
+const deleteSyncKey='elevate_barbershop_pending_delete_v1';
 let pendingSync=JSON.parse(localStorage.getItem(syncKey)||'[]');
+let pendingDeletes=JSON.parse(localStorage.getItem(deleteSyncKey)||'[]');
+let catalogDirty=localStorage.getItem(catalogSyncKey)==='1';
 let db=JSON.parse(localStorage.getItem(key)||localStorage.getItem(legacyKey)||'null')||{
 settings:{name:'Elevate Barbershop',currency:'€',commission:50,open:'10:00',close:'20:00'},
 barbers:[
@@ -276,21 +280,34 @@ let remoteLoaded=false;
 let syncInFlight=false;
 let syncRetryTimer=null;
 async function syncRemoteNow(){
- if(!navigator.onLine) { updateConnectionStatus(); return false; }
+ if(!navigator.onLine){ updateConnectionStatus(); return false; }
  if(syncInFlight) return false;
- if(!pendingSync.length){ updateConnectionStatus(); return true; }
+ if(!pendingSync.length && !pendingDeletes.length && !catalogDirty){ updateConnectionStatus(); return true; }
  syncInFlight=true;
  try{
    const payload=pendingSync.map(id=>db.entries.find(e=>String(e.id)===String(id))).filter(Boolean);
-   if(!payload.length){ pendingSync=[]; localStorage.setItem(syncKey,'[]'); updateConnectionStatus(); return true; }
    const controller=new AbortController();
    const timeout=setTimeout(()=>controller.abort(),8000);
-   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:payload,catalog:{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}}),signal:controller.signal});
+   const body={
+     entries:payload,
+     deletedIds:pendingDeletes.map(String),
+     catalog:catalogDirty?{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}:null
+   };
+   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
    clearTimeout(timeout);
    if(!r.ok) throw new Error('sync');
    const out=await r.json();
-   if(out.db){ db=out.db; localStorage.setItem(key,JSON.stringify(db)); }
-   pendingSync=[]; localStorage.setItem(syncKey,'[]'); updateConnectionStatus(); render(); return true;
+   if(!out.db) throw new Error('sync-response');
+   db=out.db;
+   pendingSync=[];
+   pendingDeletes=[];
+   catalogDirty=false;
+   localStorage.setItem(key,JSON.stringify(db));
+   localStorage.setItem(syncKey,'[]');
+   localStorage.setItem(deleteSyncKey,'[]');
+   localStorage.removeItem(catalogSyncKey);
+   updateConnectionStatus(); render();
+   return true;
  }catch(e){
    updateConnectionStatus();
    if(navigator.onLine && !syncRetryTimer){
@@ -299,37 +316,50 @@ async function syncRemoteNow(){
    return false;
  }finally{ syncInFlight=false; }
 }
-function save(){
- localStorage.setItem(key,JSON.stringify(db));localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+function save(options={}){
+ const syncCatalog=options.syncCatalog!==false;
+ if(syncCatalog) catalogDirty=true;
+ localStorage.setItem(key,JSON.stringify(db));
+ localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+ localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
+ if(catalogDirty) localStorage.setItem(catalogSyncKey,'1');
  render();updateConnectionStatus();
- if(navigator.onLine && pendingSync.length) syncRemoteNow();
+ if(navigator.onLine && (pendingSync.length||pendingDeletes.length||catalogDirty)) syncRemoteNow();
 }
 function queueSync(entry){
- if(!pendingSync.includes(entry.id)) pendingSync.push(entry.id);
- localStorage.setItem(syncKey,JSON.stringify(pendingSync)); updateConnectionStatus();
+ const id=typeof entry==='object'?entry.id:entry;
+ if(id!=null && !pendingSync.map(String).includes(String(id))) pendingSync.push(id);
+ localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+ updateConnectionStatus();
+ if(navigator.onLine) syncRemoteNow();
+}
+function queueDelete(id){
+ if(id!=null && !pendingDeletes.map(String).includes(String(id))) pendingDeletes.push(id);
+ localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
+ updateConnectionStatus();
  if(navigator.onLine) syncRemoteNow();
 }
 async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
 async function loadRemote(){
- if(!navigator.onLine) { updateConnectionStatus(); return; }
- if(syncInFlight || pendingSync.length){ updateConnectionStatus(); return; }
+ if(!navigator.onLine){updateConnectionStatus();return;}
+ if(syncInFlight || pendingSync.length || pendingDeletes.length || catalogDirty){updateConnectionStatus();return;}
  try{
    const r=await fetch('/api/data',{cache:'no-store'}); if(!r.ok) throw new Error('data');
    const remote=await r.json();
-   const localPendingIds=new Set(pendingSync.map(String));
-   const pendingLocal=(db.entries||[]).filter(e=>localPendingIds.has(String(e.id)));
    db=remote;
-   const byId=new Map((db.entries||[]).map(e=>[String(e.id),e]));
-   pendingLocal.forEach(e=>byId.set(String(e.id),e));
-   db.entries=[...byId.values()];
    remoteLoaded=true;
    localStorage.setItem(key,JSON.stringify(db));
-   render(); updateConnectionStatus();
-   if(pendingLocal.length) await syncRemoteNow();
+   render();updateConnectionStatus();
  }catch(e){updateConnectionStatus();}
 }
-function updateConnectionStatus(){const el=document.getElementById('syncStatus');if(!el)return;el.textContent=navigator.onLine?(pendingSync.length?'● Online · '+pendingSync.length+' pendente(s)':'● Online · sincronizado'):'● Offline · dados guardados neste dispositivo';el.style.fontWeight='700';}
-window.addEventListener('online',()=>{updateConnectionStatus();loadRemote()});window.addEventListener('offline',updateConnectionStatus);
+function updateConnectionStatus(){
+ const el=document.getElementById('syncStatus');if(!el)return;
+ const pending=pendingSync.length+pendingDeletes.length+(catalogDirty?1:0);
+ el.textContent=navigator.onLine?(pending?'● Online · '+pending+' pendente(s)':'● Online · sincronizado'):'● Offline · dados guardados neste dispositivo';
+ el.style.fontWeight='700';
+}
+window.addEventListener('online',()=>{updateConnectionStatus();syncRemoteNow();loadRemote()});
+window.addEventListener('offline',updateConnectionStatus);
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function money(n){return db.settings.currency+Number(n).toFixed(2)}
 function barberName(id){return db.barbers.find(x=>x.id==id)?.name||'—'}
@@ -574,8 +604,8 @@ function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',s
 function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save()}
 function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save()}}
 function openEntry(id){let e=db.entries.find(x=>x.id==id)||{id:null,date:localDate(),time:new Date().toTimeString().slice(0,5),barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',payment:'Cash',tip:0,total:0};openModal(id?'Editar lançamento':'Novo lançamento',`<div class="formgrid"><div><label>Data</label><input id="fDate" type="date" value="${e.date}"></div><div><label>Hora</label><input id="fTime" type="time" value="${e.time}"></div><div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div><div><label>Serviço</label><select id="fService">${db.services.map(s=>`<option ${s.name===e.service?'selected':''}>${s.name}</option>`).join('')}</select></div><div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===e.payment?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(e.productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div><div><label>Valor</label><input id="fTotal" type="number" step=".01" value="${e.total}"></div><div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${e.tip}"></div><div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div></div><br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`)}
-function saveEntry(id){let o={id:id||Date.now(),date:fDate.value,time:fTime.value,barber:Number(fBarber.value),service:fService.value,payment:fPay.value,productId:fProduct.value?Number(fProduct.value):null,productName:fProduct.value?(db.products.find(p=>p.id==Number(fProduct.value))?.name||''):'',productPrice:fProduct.value?Number(db.products.find(p=>p.id==Number(fProduct.value))?.price||0):0,tip:Number(fTip.value),tipPayment:fTipPay.value,total:Number(fTotal.value)};let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);closeModal();save()}
-function delEntry(id){if(confirm('Excluir lançamento?')){db.entries=db.entries.filter(x=>x.id!=id);save()}}
+function saveEntry(id){let o={id:id||Date.now(),date:fDate.value,time:fTime.value,barber:Number(fBarber.value),service:fService.value,payment:fPay.value,productId:fProduct.value?Number(fProduct.value):null,productName:fProduct.value?(db.products.find(p=>p.id==Number(fProduct.value))?.name||''):'',productPrice:fProduct.value?Number(db.products.find(p=>p.id==Number(fProduct.value))?.price||0):0,tip:Number(fTip.value),tipPayment:fTipPay.value,total:Number(fTotal.value)};let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);queueSync({id:o.id});closeModal();save({syncCatalog:false})}
+function delEntry(id){if(confirm('Excluir lançamento?')){db.entries=db.entries.filter(x=>x.id!=id);queueDelete(id);save({syncCatalog:false})}}
 function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
 function filterCash(type){show('cash');if(type==='today')alert('Filtro de hoje aplicado no MVP. A versão online terá filtros por dia, semana, mês e período personalizado.')}
 
@@ -722,7 +752,7 @@ function ipadSave(){
  ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};
  ipadStep2.style.display='none';
  ipadStep1.style.display='block';
- save();
+ save({syncCatalog:false});
  renderIpad();
 }
 
