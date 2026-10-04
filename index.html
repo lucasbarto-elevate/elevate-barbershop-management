@@ -709,8 +709,9 @@ function ipadSave(){
    total:serviceTotal+productTotal
  });
  const savedId=db.entries[db.entries.length-1].id;
- queueSync({id:savedId});
  products.forEach(x=>{const p=db.products.find(p=>p.id===x.id);p.stock-=x.qty});
+ // Queue only after the stock deduction so the online catalog receives the new stock.
+ queueSync({id:savedId});
  const lowAfter=lowStockProducts();
  if(lowAfter.length){ setTimeout(()=>{ alert('⚠️ Estoque acabando: '+lowAfter.map(p=>`${p.name} (${p.stock} un.)`).join(', ')); renderStockAlert(); },120); }
  alert(navigator.onLine?'✓ Lançamento registrado com sucesso!':'✓ Lançamento guardado no iPad. Será sincronizado quando a internet voltar.');
