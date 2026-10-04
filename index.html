@@ -709,7 +709,7 @@ function openEntry(id){
       <div><label>Data</label><input id="fDate" type="date" value="${e.date||localDate()}"></div>
       <div><label>Hora</label><input id="fTime" type="time" value="${e.time||'00:00'}"></div>
       <div><label>Barbeiro</label><select id="fBarber" onchange="updateEntryEditPreview()">${db.barbers.map(b=>`<option value="${b.id}" ${String(b.id)===String(e.barber)?'selected':''}>${b.name}</option>`).join('')}</select></div>
-      <div><label>Serviço</label><select id="fService">
+      <div><label>Serviço</label><select id="fService" onchange="editServiceChanged()">
         <option value="">Nenhum</option>
         ${db.services.map(s=>`<option value="${s.id}" ${String(s.id)===String(firstService?.id)?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}
       </select></div>
