@@ -565,7 +565,7 @@ function renderInfo(){
 }
 function render(){brand.textContent=db.settings.name;renderInfo();renderIpad();renderDashboard();if(document.getElementById('history'))renderHistory();if(document.getElementById('revenueHistory')){if(!revStart.value){setRevenuePeriod('month')}else renderRevenueHistory();}renderTeam();renderServices();renderProducts();renderCash();renderCommissions();renderSettings()}
 function entryQtySum(entries,type){return entries.reduce((a,e)=>a+(type==='service'?entryServiceQty(e):entryProductQty(e)),0)}
-let dashboardPeriod='today';
+let dashboardPeriod='month';
 function dashboardRange(type){
   const today=localDate(), p=today.split('-').map(Number), d=new Date(p[0],p[1]-1,p[2],12,0,0);
   let from=today,to=today;
@@ -1012,7 +1012,7 @@ function ipadSave(){
  renderIpad();
 }
 
-navInit();render();show('dashboard');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
+navInit();render();setDashboardPeriod('month');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v3.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
