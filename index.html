@@ -74,13 +74,26 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 </header>
 <main>
 <section id="dashboard" class="page active">
-<h1>Dashboard</h1><div class="sub">Gestão da Elevate Barber Shop</div>
-<div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap">
-<div><strong>💈 Lançamentos dos Barbeiros</strong><div class="small">Abra esta tela no iPad para os barbeiros registrarem serviços e produtos.</div></div>
-<button class="primary" onclick="openBarberPage()">Abrir Área dos Barbeiros →</button>
+<h1>Dashboard</h1>
+<div class="sub">Visão geral da Elevate Barber Shop — escolha o período que quer analisar.</div>
+<div class="card" style="margin:18px 0">
+  <div class="actions">
+    <button onclick="setDashboardPeriod('today')">Hoje</button>
+    <button onclick="setDashboardPeriod('week')">Esta semana</button>
+    <button onclick="setDashboardPeriod('month')">Este mês</button>
+    <button onclick="setDashboardPeriod('year')">Este ano</button>
+  </div>
+  <div class="grid cards" style="margin-top:12px">
+    <div><label>Data inicial</label><input id="dashFrom" type="date" onchange="renderDashboard()"></div>
+    <div><label>Data final</label><input id="dashTo" type="date" onchange="renderDashboard()"></div>
+    <div style="display:flex;align-items:end"><button class="primary" style="width:100%" onclick="openBarberPage()">Abrir Área dos Barbeiros →</button></div>
+  </div>
 </div>
-<div id="stockAlert" style="margin-bottom:18px"></div><div class="grid stats" id="stats"></div>
+<div id="stockAlert" style="margin-bottom:18px"></div>
+<div class="grid stats" id="stats"></div>
+<div id="dashboardPayments" class="grid stats"></div>
 <div class="grid cards" id="barberCards"></div>
+<div id="dashboardDetails" style="margin-top:18px"></div>
 </section>
 
 <section id="revenue" class="page">
@@ -552,22 +565,94 @@ function renderInfo(){
 }
 function render(){brand.textContent=db.settings.name;renderInfo();renderIpad();renderDashboard();if(document.getElementById('history'))renderHistory();if(document.getElementById('revenueHistory')){if(!revStart.value){setRevenuePeriod('month')}else renderRevenueHistory();}renderTeam();renderServices();renderProducts();renderCash();renderCommissions();renderSettings()}
 function entryQtySum(entries,type){return entries.reduce((a,e)=>a+(type==='service'?entryServiceQty(e):entryProductQty(e)),0)}
-function renderDashboard(){
-renderStockAlert();
-let todayStr=localDate();
-let today=db.entries.filter(e=>e.date===todayStr);let rev=today.reduce((s,e)=>s+entryTotal(e),0),tips=today.reduce((s,e)=>s+Number(e.tip||0),0);
-const serviceRevenueToday=today.reduce((s,e)=>s+entryServiceTotal(e),0);
-  const productRevenueToday=today.reduce((s,e)=>s+entryProductTotal(e),0);
-  const serviceCommissionToday=today.reduce((s,e)=>{const b=db.barbers.find(x=>x.id==e.barber);return s+entryServiceTotal(e)*barberServiceCommissionRate(b)/100},0);
-  const productCommissionToday=today.reduce((s,e)=>s+entryProductCommission(e),0);
-  const shopTipsToday=today.filter(e=>isShopBarber(db.barbers.find(x=>x.id==e.barber))).reduce((s,e)=>s+Number(e.tip||0),0);
-  const shopShareToday=serviceRevenueToday+productRevenueToday-serviceCommissionToday-productCommissionToday+shopTipsToday;
-  const clientsToday=today.reduce((a,e)=>a+entryClients(e),0);
-  const serviceQtyToday=today.reduce((a,e)=>a+entryServiceQty(e),0);
-  const productQtyToday=today.reduce((a,e)=>a+entryProductQty(e),0);
-  stats.innerHTML=[['Faturamento hoje',money(rev)],['Parte da barbearia',money(shopShareToday)],['Gorjetas',money(tips)],['Clientes hoje',clientsToday],['Serviços vendidos hoje',serviceQtyToday],['Produtos vendidos hoje',productQtyToday],['Barbeiros',db.barbers.length],['Cash',money(today.reduce((s,e)=>s+paymentTotal(e,'Cash'),0))],['Revolut',money(today.reduce((s,e)=>s+paymentTotal(e,'Revolut'),0))],['SumUp',money(today.reduce((s,e)=>s+paymentTotal(e,'SumUp'),0))]].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');
-barberCards.innerHTML=db.barbers.map(b=>{let es=today.filter(e=>e.barber==b.id),r=es.reduce((s,e)=>s+entryTotal(e),0),t=es.reduce((s,e)=>s+Number(e.tip||0),0),serviceRevenue=es.reduce((s,e)=>s+entryServiceTotal(e),0),serviceComm=serviceRevenue*barberServiceCommissionRate(b)/100,productSales=es.reduce((s,e)=>s+entryProductTotal(e),0),productComm=es.reduce((s,e)=>s+entryProductCommission(e),0),totalComm=serviceComm+productComm,shopShare=serviceRevenue+productSales-totalComm+(isShopBarber(b)?t:0);return `<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small"><b>Lançamentos:</b> ${es.length} · <b>Clientes:</b> ${es.reduce((a,e)=>a+entryClients(e),0)}</p><p class="small"><b>Serviços vendidos:</b> ${entryQtySum(es,'service')}</p><p class="small"><b>Produtos vendidos:</b> ${entryQtySum(es,'product')}</p><p class="small"><b>Valor serviços:</b> ${money(serviceRevenue)} · <b>Valor produtos:</b> ${money(productSales)}</p><p class="small"><b>Caixinhas:</b> ${money(t)}</p><div class="value">${money(r+t)}</div><p class="small">Comissão serviços: <b>${money(serviceComm)}</b> · Comissão produtos: <b>${money(productComm)}</b></p><p class="small">Total comissão: <b>${money(totalComm)}</b></p><p class="small"><b>Parte da barbearia:</b> ${money(shopShare)}</p></div>`}).join('')
+let dashboardPeriod='today';
+function dashboardRange(type){
+  const today=localDate(), p=today.split('-').map(Number), d=new Date(p[0],p[1]-1,p[2],12,0,0);
+  let from=today,to=today;
+  if(type==='week'){
+    const day=d.getDay(), offset=day===0?-6:1-day;
+    from=dateOnlyAdd(today,offset); to=dateOnlyAdd(from,6);
+  }else if(type==='month'){
+    from=p[0]+'-'+String(p[1]).padStart(2,'0')+'-01';
+    const last=new Date(p[0],p[1],0,12,0,0);
+    to=last.getFullYear()+'-'+String(last.getMonth()+1).padStart(2,'0')+'-'+String(last.getDate()).padStart(2,'0');
+  }else if(type==='year'){
+    from=p[0]+'-01-01'; to=p[0]+'-12-31';
+  }
+  return {from,to};
 }
+function setDashboardPeriod(type){
+  dashboardPeriod=type;
+  const r=dashboardRange(type);
+  const from=document.getElementById('dashFrom'),to=document.getElementById('dashTo');
+  if(from)from.value=r.from;
+  if(to)to.value=r.to;
+  renderDashboard();
+}
+function renderDashboard(){
+  renderStockAlert();
+  const from=document.getElementById('dashFrom'), to=document.getElementById('dashTo');
+  if(from && !from.value){const r=dashboardRange(dashboardPeriod);from.value=r.from;if(to)to.value=r.to;}
+  const start=from?.value||localDate(), end=to?.value||start;
+  const entries=db.entries.filter(e=>(!start||e.date>=start)&&(!end||e.date<=end));
+  const revenue=entries.reduce((s,e)=>s+entryTotal(e),0);
+  const services=entries.reduce((s,e)=>s+entryServiceTotal(e),0);
+  const products=entries.reduce((s,e)=>s+entryProductTotal(e),0);
+  const tips=entries.reduce((s,e)=>s+Number(e.tip||0),0);
+  const clients=entries.reduce((s,e)=>s+entryClients(e),0);
+  const serviceQty=entries.reduce((s,e)=>s+entryServiceQty(e),0);
+  const productQty=entries.reduce((s,e)=>s+entryProductQty(e),0);
+  const serviceComm=entries.reduce((s,e)=>{const b=db.barbers.find(x=>x.id==e.barber);return s+entryServiceTotal(e)*barberServiceCommissionRate(b)/100},0);
+  const productComm=entries.reduce((s,e)=>s+entryProductCommission(e),0);
+  const totalComm=serviceComm+productComm;
+  const shopTips=entries.filter(e=>isShopBarber(db.barbers.find(x=>x.id==e.barber))).reduce((s,e)=>s+Number(e.tip||0),0);
+  const shopShare=services+products-totalComm+shopTips;
+  const ticket=clients?revenue/clients:0;
+
+  stats.innerHTML=[
+    ['Faturamento',money(revenue)],['Parte da barbearia',money(shopShare)],['Caixinhas',money(tips)],
+    ['Clientes',clients],['Serviços vendidos',serviceQty],['Produtos vendidos',productQty],
+    ['Comissões',money(totalComm)],['Lançamentos',entries.length]
+  ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="small">${start} → ${end}</div></div>`).join('');
+
+  dashboardPayments.innerHTML=['Cash','Revolut','SumUp'].map(p=>`<div class="card"><div class="label">${p}</div><div class="value">${money(entries.reduce((s,e)=>s+paymentTotal(e,p),0))}</div><div class="small">Serviços + produtos</div></div>`).join('');
+
+  barberCards.innerHTML=db.barbers.map(b=>{
+    const es=entries.filter(e=>e.barber==b.id);
+    const sr=es.reduce((s,e)=>s+entryServiceTotal(e),0), pr=es.reduce((s,e)=>s+entryProductTotal(e),0);
+    const tip=es.reduce((s,e)=>s+Number(e.tip||0),0), sc=sr*barberServiceCommissionRate(b)/100;
+    const pc=isShopBarber(b)?0:es.reduce((s,e)=>s+entryProductCommission(e),0);
+    const comm=sc+pc, share=sr+pr-comm+(isShopBarber(b)?tip:0);
+    return `<div class="card">
+      <div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div>
+      <p class="small"><b>Lançamentos:</b> ${es.length} · <b>Clientes:</b> ${es.reduce((a,e)=>a+entryClients(e),0)}</p>
+      <p class="small"><b>Serviços:</b> ${entryQtySum(es,'service')} · <b>Produtos:</b> ${entryQtySum(es,'product')}</p>
+      <p class="small"><b>Serviços:</b> ${money(sr)} · <b>Produtos:</b> ${money(pr)}</p>
+      <p class="small"><b>Caixinhas:</b> ${money(tip)}</p>
+      <div class="value">${money(sr+pr)}</div>
+      <p class="small"><b>Comissão:</b> ${money(comm)} · <b>Parte da barbearia:</b> ${money(share)}</p>
+    </div>`;
+  }).join('');
+
+  const serviceMap={};
+  const productMap={};
+  entries.forEach(e=>{
+    getServiceItems(e).forEach(x=>{const k=x.id||x.name;serviceMap[k]??={name:x.name,qty:0,value:0};serviceMap[k].qty+=Number(x.qty||1);serviceMap[k].value+=Number(x.qty||1)*Number(x.unitPrice||0);});
+    getProductItems(e).forEach(x=>{const k=x.id||x.name;productMap[k]??={name:x.name,qty:0,value:0};productMap[k].qty+=Number(x.qty||1);productMap[k].value+=Number(x.qty||1)*Number(x.unitPrice||0);});
+  });
+  const topServices=Object.values(serviceMap).sort((a,b)=>b.value-a.value).slice(0,5);
+  const topProducts=Object.values(productMap).sort((a,b)=>b.value-a.value).slice(0,5);
+  dashboardDetails.innerHTML=`
+    <div class="grid cards">
+      <div class="card"><div class="bar"><strong>Resumo</strong><span class="badge">Ticket médio ${money(ticket)}</span></div>
+        <p class="small">Serviços ${money(services)} · Produtos ${money(products)} · Caixinhas ${money(tips)}</p>
+        <p class="small">Cash ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Cash'),0))} · Revolut ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Revolut'),0))} · SumUp ${money(entries.reduce((s,e)=>s+paymentTotal(e,'SumUp'),0))}</p>
+      </div>
+      <div class="card"><strong>Top serviços</strong>${topServices.length?'<ol style="padding-left:20px">'+topServices.map(x=>`<li>${x.name} — ${x.qty} un. · ${money(x.value)}</li>`).join('')+'</ol>':'<p class="small">Nenhum serviço no período.</p>'}</div>
+      <div class="card"><strong>Top produtos</strong>${topProducts.length?'<ol style="padding-left:20px">'+topProducts.map(x=>`<li>${x.name} — ${x.qty} un. · ${money(x.value)}</li>`).join('')+'</ol>':'<p class="small">Nenhum produto no período.</p>'}</div>
+    </div>`;
+}
+
 function renderTeam(){teamList.innerHTML=db.barbers.map(b=>`<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small">${isShopBarber(b)?'Comissão: 0% — 100% da receita fica para a barbearia':`Comissão: ${b.commission}%`} · ${db.settings.open}–${db.settings.close}</p><div class="actions"><button onclick="openBarber(${b.id})">Editar</button><button class="danger" onclick="delBarber(${b.id})">Excluir</button></div></div>`).join('')}
 function renderServices(){serviceList.innerHTML=db.services.map(s=>`<div class="card"><div class="bar"><strong>${s.name}</strong><span class="money">${money(s.price)}</span></div><p class="small">${s.duration} min</p><div class="actions"><button onclick="openService(${s.id})">Editar</button><button class="danger" onclick="delService(${s.id})">Excluir</button></div></div>`).join('')}
 function lowStockProducts(){return db.products.filter(p=>Number(p.stock||0)<=Number(p.min||0));}
@@ -730,7 +815,8 @@ function openEntry(id){
   updateEntryEditPreview();
 }
 function editServiceChanged(){const s=document.getElementById('fService'),v=document.getElementById('fServiceValue');const x=db.services.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}
-function editProductChanged(){const s=document.getElementById('fProduct'),v=document.getElementById('fProductValue');const x=db.products.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}\nfunction updateEntryEditPreview(){
+function editProductChanged(){const s=document.getElementById('fProduct'),v=document.getElementById('fProductValue');const x=db.products.find(a=>String(a.id)===String(s?.value));if(x&&v)v.value=Number(x.price||0).toFixed(2);updateEntryEditPreview();}
+function updateEntryEditPreview(){
   const g=id=>document.getElementById(id);
   const sq=Math.max(0,Number(g('fServiceQty')?.value||0)), sv=Math.max(0,Number(g('fServiceValue')?.value||0));
   const pq=Math.max(0,Number(g('fProductQty')?.value||0)), pv=Math.max(0,Number(g('fProductValue')?.value||0));
