@@ -147,7 +147,7 @@ body.ipad-mode .ipad-page h1{font-size:34px}
   </div>
 </div>
 <div class="grid stats" id="cashStats"></div>
-<table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
+<table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Pag. produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
 
 <section id="commissions" class="page"><h1>Comissões</h1><div class="sub">Fechamento por barbeiro</div>
 <div class="card"><div class="toolbar"><div><strong>Período</strong></div><div><input id="commFrom" type="date" style="width:150px" onchange="renderCommissions()"> <input id="commTo" type="date" style="width:150px" onchange="renderCommissions()"></div></div>
@@ -461,7 +461,7 @@ function renderRevenueHistory(){
         <div><span class="small">Comissão produtos</span><br><b>${money(pc)}</b></div>
       </div>
       <table><thead><tr>
-        <th>Data</th><th>Hora</th><th>Clientes</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Valor serviço</th><th>Produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th>
+        <th>Data</th><th>Hora</th><th>Clientes</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Valor serviço</th><th>Valor produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th>
       </tr></thead><tbody>
       ${list.slice().sort((a,b)=>`${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).map(x=>{
         const sv=Number(x.total||0)-Number(x.productPrice||0);
@@ -479,8 +479,8 @@ function renderRevenueHistory(){
   const days={};
   es.forEach(x=>(days[x.date]??=[]).push(x));
   revenueHistory.innerHTML=Object.entries(days).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,list])=>{
-    const st=list.reduce((a,x)=>a+Number(x.total||0)-Number(x.productPrice||0),0);
-    const pt=list.reduce((a,x)=>a+Number(x.productPrice||0),0);
+    const st=list.reduce((a,x)=>a+entryServiceTotal(x),0);
+    const pt=list.reduce((a,x)=>a+entryProductTotal(x),0);
     const tt=list.reduce((a,x)=>a+Number(x.tip||0),0);
     return `<div class="card" style="margin-bottom:12px">
       <div class="bar"><div><h3 style="margin:0">${date}</h3><div class="small">${list.length} lançamento(s)</div></div><strong>${money(st+pt)}</strong></div>
@@ -757,9 +757,9 @@ function renderCash(){
     const st=entryServiceTotal(e), pt=entryProductTotal(e), tip=Number(e.tip||0);
     const servicePay=st>0?(e.servicePayment||e.payment||'—'):'—';
     const productPay=pt>0?(e.productPayment||e.productPay||'—'):'—';
-    return '<tr><td>'+e.date+' '+e.time+'</td><td>'+barberName(e.barber)+'</td><td>'+(e.service||'—')+'</td><td>'+(e.productName||'—')+'</td><td>'+servicePay+'</td><td>'+money(tip)+'</td><td>'+(tip?(e.tipPayment||'Cash'):'—')+'</td><td><b>'+money(st+pt)+'</b></td><td><button onclick="openEntry('+e.id+')">Editar</button> <button class="danger" onclick="delEntry('+e.id+')">Excluir</button></td></tr>';
+    return '<tr><td>'+e.date+' '+e.time+'</td><td>'+barberName(e.barber)+'</td><td>'+(e.service||'—')+'</td><td>'+(e.productName||'—')+'</td><td>'+servicePay+'</td><td>'+productPay+'</td><td>'+money(tip)+'</td><td>'+(tip?(e.tipPayment||'Cash'):'—')+'</td><td><b>'+money(st+pt)+'</b></td><td><button onclick="openEntry('+e.id+')">Editar</button> <button class="danger" onclick="delEntry('+e.id+')">Excluir</button></td></tr>';
   }).join('');
-  entryList.innerHTML='<tr><td colspan="9" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s) · período '+from+' → '+to+'</td></tr>'+rows;
+  entryList.innerHTML='<tr><td colspan="10" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s) · período '+from+' → '+to+'</td></tr>'+rows;
 }
 function renderCommissions(){
   const from=document.getElementById('commFrom')?.value||'';
@@ -834,8 +834,31 @@ function updateEntryEditPreview(){
   const st=g('fService')?.value?sq*sv:0, pt=g('fProduct')?.value?pq*pv:0;
   const el=g('editTotalPreview'); if(el) el.innerHTML=`<b>Resumo</b><div class="small">${serviceName}: ${sq}× ${money(sv)} = <b>${money(st)}</b></div><div class="small">${productName}: ${g('fProduct')?.value?pq+'× '+money(pv)+' = '+money(pt):'Nenhum'}</div><div class="small">Caixinha: ${money(tip)}</div><div style="margin-top:6px"><b>Total: ${money(st+pt)}</b></div>`;
 }
+function productQtyMapForEntry(e){
+  const map=new Map();
+  for(const x of getProductItems(e)){
+    const id=String(x.id||'');
+    const qty=Number(x.qty||1);
+    if(id && qty>0) map.set(id,(map.get(id)||0)+qty);
+  }
+  return map;
+}
+function adjustLocalStockForEntryChange(oldEntry,newEntry){
+  const oldQ=productQtyMapForEntry(oldEntry), newQ=productQtyMapForEntry(newEntry);
+  const ids=new Set([...oldQ.keys(),...newQ.keys()]);
+  for(const id of ids){
+    const oldQty=oldQ.get(id)||0, newQty=newQ.get(id)||0;
+    const delta=oldQty-newQty;
+    if(!delta) continue;
+    const p=db.products.find(x=>String(x.id)===id);
+    if(!p) throw new Error('Produto não encontrado: '+id);
+    const next=Number(p.stock||0)+delta;
+    if(next<0) throw new Error('Estoque insuficiente para '+(p.name||id));
+    p.stock=next;
+  }
+}
 function saveEntry(id){
-  const old=db.entries.find(x=>String(x.id)===String(id));
+  const old=db.entries.find(x=>String(x.id)===String(id))||null;
   const get=x=>document.getElementById(x);
   const date=get('fDate')?.value||localDate(), time=get('fTime')?.value||new Date().toTimeString().slice(0,5);
   const barber=Number(get('fBarber')?.value||0);
@@ -862,13 +885,38 @@ function saveEntry(id){
     productPayment:productItems.length?get('fProductPay').value:null,
     tip,tipPayment:tip>0?get('fTipPay').value:null,total:serviceTotal+productTotal
   };
+  try{
+    adjustLocalStockForEntryChange(old,o);
+  }catch(err){
+    return alert(err.message||'Não foi possível atualizar o estoque.');
+  }
   const i=db.entries.findIndex(x=>String(x.id)===String(id));
   if(i>=0) db.entries[i]=o; else db.entries.push(o);
   localStorage.setItem(key,JSON.stringify(db));
-  render(); closeModal(); queueSync({id:o.id});
+  render();
+  closeModal();
+  queueSync({id:o.id});
   setTimeout(()=>updateEntryEditPreview(),0);
-}function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
-function filterCash(type){show('cash');if(type==='today')alert('Filtro de hoje aplicado no MVP. A versão online terá filtros por dia, semana, mês e período personalizado.')}
+}
+function delEntry(id){
+  const entry=db.entries.find(x=>String(x.id)===String(id));
+  if(!entry) return;
+  if(!confirm('Excluir este lançamento? O estoque dos produtos vendidos será devolvido.')) return;
+  try{
+    adjustLocalStockForEntryChange(entry,null);
+  }catch(err){
+    return alert(err.message||'Não foi possível atualizar o estoque.');
+  }
+  db.entries=db.entries.filter(x=>String(x.id)!==String(id));
+  localStorage.setItem(key,JSON.stringify(db));
+  render();
+  queueDelete(id);
+}
+function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
+function filterCash(type){
+  show('cash');
+  if(['today','week','month','year'].includes(type)) setCashPeriod(type);
+}
 
 let ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};
 
