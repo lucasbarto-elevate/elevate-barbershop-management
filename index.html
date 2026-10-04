@@ -692,26 +692,97 @@ function delService(id){if(confirm('Excluir serviço?')){db.services=db.services
 function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',stock:0,cost:0,price:0,min:2,commission:0};openModal(id?'Editar produto':'Novo produto',`<div class="formgrid"><div><label>Produto</label><input id="fName" value="${p.name}"></div><div><label>Estoque</label><input id="fStock" type="number" value="${p.stock}"></div><div><label>Custo</label><input id="fCost" type="number" step=".01" value="${p.cost}"></div><div><label>Preço de venda</label><input id="fPrice" type="number" step=".01" value="${p.price}"></div><div><label>Comissão do barbeiro por unidade (€)</label><input id="fProdComm" type="number" min="0" step=".01" value="${p.commission||0}"></div><div><label>Estoque mínimo</label><input id="fMin" type="number" value="${p.min}"></div></div><br><button class="primary" onclick="saveProduct(${id||0})">Salvar</button>`)}
 function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save()}
 function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save()}}
-function openEntry(id){let e=db.entries.find(x=>x.id==id)||{id:null,date:localDate(),time:new Date().toTimeString().slice(0,5),barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',payment:'Cash',tip:0,total:0};openModal(id?'Editar lançamento':'Novo lançamento',`<div class="formgrid"><div><label>Data</label><input id="fDate" type="date" value="${e.date}"></div><div><label>Hora</label><input id="fTime" type="time" value="${e.time}"></div><div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div><div><label>Serviço</label><select id="fService">${db.services.map(s=>`<option ${s.name===e.service?'selected':''}>${s.name}</option>`).join('')}</select></div><div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===e.payment?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(e.productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div><div><label>Valor</label><input id="fTotal" type="number" step=".01" value="${e.total}"></div><div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${e.tip}"></div><div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div></div><br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`)}
-function saveEntry(id){
-  const old=db.entries.find(x=>x.id==id);
-  const oldProducts=getProductItems(old||{});
-  const barber=Number(fBarber.value);
-  const serviceName=fService.value;
-  const service=db.services.find(s=>s.name===serviceName);
-  const productId=fProduct.value?Number(fProduct.value):null;
-  const product=db.products.find(p=>p.id===productId);
-  const tip=Number(fTip.value||0);
-  const serviceTotal=service?Number(fTotal.value||0)-Number(product?.price||0):0;
-  const productTotal=product?Number(product.price||0):0;
-  const serviceItems=service?[{id:service.id,name:service.name,qty:1,unitPrice:Number(serviceTotal>0?serviceTotal:service.price)}]:[];
-  const productItems=product?[{id:product.id,name:product.name,qty:1,unitPrice:Number(product.price||0),commission:Number(product.commission||0)}]:[];
-  const o={id:id||Date.now(),date:fDate.value,time:fTime.value,barber,clients:serviceItems.length?Number(old?.clients||1):0,service:serviceItems.map(x=>`${x.qty}× ${x.name}`).join(''),serviceItems,productId:product?.id||null,productName:product?.name||'',productPrice:productTotal,productItems,payment:fPay.value,servicePayment:serviceItems.length?fPay.value:null,productPayment:productItems.length?(old?.productPayment||fPay.value):null,tip,tipPayment:tip?fTipPay.value:null,total:serviceItems.reduce((a,x)=>a+x.qty*x.unitPrice,0)+productTotal};
-  let i=db.entries.findIndex(x=>x.id==id);if(i>=0)db.entries[i]=o;else db.entries.push(o);
-  queueSync({id:o.id});closeModal();save({syncCatalog:false})
+function openEntry(id){
+  const e=db.entries.find(x=>String(x.id)===String(id))||{
+    id:null,date:localDate(),time:new Date().toTimeString().slice(0,5),
+    barber:db.barbers[0]?.id||0,service:db.services[0]?.name||'',
+    payment:'Cash',servicePayment:'Cash',productPayment:null,tip:0,tipPayment:'Cash',total:0
+  };
+  const services=getServiceItems(e);
+  const products=getProductItems(e);
+  const firstService=services[0];
+  const firstProduct=products[0];
+  const serviceName=firstService?.name||'';
+  const productId=firstProduct?.id||null;
+  const servicePayment=e.servicePayment||e.payment||'Cash';
+  const productPayment=e.productPayment||'Cash';
+  const total=entryTotal(e);
+  openModal(id?'Editar lançamento':'Novo lançamento',`
+    <div class="formgrid">
+      <div><label>Data</label><input id="fDate" type="date" value="${e.date||localDate()}"></div>
+      <div><label>Hora</label><input id="fTime" type="time" value="${e.time||'00:00'}"></div>
+      <div><label>Barbeiro</label><select id="fBarber">${db.barbers.map(b=>`<option value="${b.id}" ${b.id==e.barber?'selected':''}>${b.name}</option>`).join('')}</select></div>
+      <div><label>Serviço</label><select id="fService">
+        <option value="">Nenhum</option>
+        ${db.services.map(s=>`<option value="${s.id}" ${s.name===serviceName?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}
+      </select></div>
+      <div><label>Pagamento do serviço</label><select id="fPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===servicePayment?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div><label>Produto</label><select id="fProduct"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${Number(productId)===p.id?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div>
+      <div><label>Pagamento do produto</label><select id="fProductPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===productPayment?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div><label>Valor total do lançamento</label><input id="fTotal" type="number" step=".01" value="${total.toFixed(2)}"></div>
+      <div><label>Gorjeta</label><input id="fTip" type="number" step=".01" value="${Number(e.tip||0).toFixed(2)}"></div>
+      <div><label>Pagamento da caixinha</label><select id="fTipPay">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===(e.tipPayment||'Cash')?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div>
+    <div class="small" style="margin-top:10px">${services.length>1||products.length>1?'Este lançamento tem múltiplos itens. A edição administrativa simplificada preserva o lançamento, mas permite alterar o item principal.':''}</div>
+    <br><button class="primary" onclick="saveEntry(${id||0})">Salvar</button>`
+  );
 }
-function delEntry(id){if(confirm('Excluir lançamento?')){db.entries=db.entries.filter(x=>x.id!=id);queueDelete(id);save({syncCatalog:false})}}
-function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
+function saveEntry(id){
+  const old=db.entries.find(x=>String(x.id)===String(id));
+  const get=id=>document.getElementById(id);
+  const date=get('fDate')?.value||localDate();
+  const time=get('fTime')?.value||new Date().toTimeString().slice(0,5);
+  const barber=Number(get('fBarber')?.value||0);
+  const serviceId=Number(get('fService')?.value||0);
+  const productId=Number(get('fProduct')?.value||0)||null;
+  const service=db.services.find(s=>Number(s.id)===serviceId);
+  const product=db.products.find(p=>Number(p.id)===productId);
+  const servicePayment=get('fPay')?.value||'Cash';
+  const productPayment=get('fProductPay')?.value||'Cash';
+  const tip=Number(get('fTip')?.value||0);
+  const requestedTotal=Number(get('fTotal')?.value||0);
+  const oldServices=getServiceItems(old||{});
+  const oldProducts=getProductItems(old||{});
+  let serviceItems=[];
+  let productItems=[];
+  if(service){
+    const oldMatch=oldServices.find(x=>Number(x.id)===Number(service.id));
+    let serviceValue=Number(service.price||0);
+    if(product) serviceValue=Math.max(0,requestedTotal-Number(product.price||0));
+    else if(requestedTotal>0) serviceValue=requestedTotal;
+    serviceItems=[{id:service.id,name:service.name,qty:Number(oldMatch?.qty||1),unitPrice:serviceValue}];
+  }else if(!product){
+    serviceItems=oldServices;
+  }
+  if(product){
+    const oldMatch=oldProducts.find(x=>Number(x.id)===Number(product.id));
+    productItems=[{id:product.id,name:product.name,qty:Number(oldMatch?.qty||1),unitPrice:Number(product.price||0),commission:Number(product.commission||0)}];
+  }else if(!service){
+    productItems=oldProducts;
+  }
+  const clients=serviceItems.length?Number(old?.clients||1):0;
+  const serviceTotal=serviceItems.reduce((sum,x)=>sum+Number(x.qty||1)*Number(x.unitPrice||0),0);
+  const productTotal=productItems.reduce((sum,x)=>sum+Number(x.qty||1)*Number(x.unitPrice||0),0);
+  const o={
+    id:id||Date.now(),date,time,barber,clients,
+    service:serviceItems.map(x=>`${x.qty||1}× ${x.name}`).join(' + '),
+    serviceItems,
+    productId:productItems.length===1?productItems[0].id:null,
+    productName:productItems.map(x=>`${x.qty||1}× ${x.name}`).join(' + '),
+    productPrice:productTotal,
+    productItems,
+    payment:serviceItems.length?servicePayment:null,
+    servicePayment:serviceItems.length?servicePayment:null,
+    productPayment:productItems.length?productPayment:null,
+    tip,tipPayment:tip>0?(get('fTipPay')?.value||'Cash'):null,
+    total:serviceTotal+productTotal
+  };
+  const i=db.entries.findIndex(x=>String(x.id)===String(id));
+  if(i>=0) db.entries[i]=o; else db.entries.push(o);
+  queueSync({id:o.id});
+  closeModal();
+  save({syncCatalog:false});
+}function saveSettings(){db.settings={...db.settings,name:setName.value,currency:setCurrency.value,commission:Number(setCommission.value),open:setOpen.value,close:setClose.value};db.barbers.forEach(b=>{if(!b.commission)b.commission=db.settings.commission});save();alert('Configurações salvas')}
 function filterCash(type){show('cash');if(type==='today')alert('Filtro de hoje aplicado no MVP. A versão online terá filtros por dia, semana, mês e período personalizado.')}
 
 let ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};
