@@ -8,16 +8,43 @@ const ENTRY_PREFIX = 'entries/';
 
 function cloneSeed(){ return structuredClone(seed); }
 
-async function readAllEntries(){
-  const { blobs } = await store.list({ prefix: ENTRY_PREFIX });
+function sleep(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
+
+async function blobGet(key, options={type:'json'}, attempts=3){
+  let lastError;
+  for(let attempt=0; attempt<attempts; attempt++){
+    try{
+      return await store.get(key, options);
+    }catch(err){
+      lastError=err;
+      if(attempt<attempts-1) await sleep(150*(attempt+1));
+    }
+  }
+  throw lastError;
+}
+
+async function listEntries(){
+  const result = await store.list({ prefix: ENTRY_PREFIX });
+  return result?.blobs || [];
+}
+
+async function readEntriesFromBlobs(blobs){
   if(!blobs?.length) return [];
-  const rows = await Promise.all(blobs.map(b => store.get(b.key, { type:'json' })));
+  const rows = await Promise.all(
+    blobs.map(b => blobGet(b.key, { type:'json' }))
+  );
   return rows.filter(Boolean);
 }
 
 async function ensureMigrated(){
-  let catalog = await store.get(CATALOG_KEY, { type:'json' });
-  const legacy = await store.get(LEGACY_KEY, { type:'json' });
+  let catalog = await blobGet(CATALOG_KEY, { type:'json' });
+
+  // Fast path: the catalog and individual entry blobs already exist.
+  // Do not read the legacy database on every /api/data request.
+  let entryBlobs = await listEntries();
+  if(catalog && entryBlobs.length) return { catalog, entryBlobs };
+
+  const legacy = await blobGet(LEGACY_KEY, { type:'json' });
   const source = legacy || cloneSeed();
 
   if(!catalog){
@@ -30,33 +57,47 @@ async function ensureMigrated(){
     await store.setJSON(CATALOG_KEY, catalog);
   }
 
-  // Recupera os lancamentos antigos se o catalogo existir mas os blobs de entries estiverem ausentes.
-  const existing = await store.list({ prefix: ENTRY_PREFIX });
-  if(!existing.blobs?.length){
-    const sourceEntries = Array.isArray(source.entries) ? source.entries : [];
+  if(!entryBlobs.length){
+    const sourceEntries = Array.isArray(source.entries) && source.entries.length
+      ? source.entries
+      : (cloneSeed().entries || []);
+
     if(sourceEntries.length){
-      await Promise.all(sourceEntries.map(entry =>
-        store.setJSON(ENTRY_PREFIX + String(entry.id), entry, { onlyIfNew:true })
-      ));
+      await Promise.all(
+        sourceEntries.map(entry =>
+          store.setJSON(
+            ENTRY_PREFIX + String(entry.id),
+            entry,
+            { onlyIfNew:true }
+          )
+        )
+      );
     }
+    entryBlobs = await listEntries();
   }
-  return catalog;
+
+  return { catalog, entryBlobs };
 }
 
 export default async () => {
   try{
-    const catalog = await ensureMigrated();
-    let entries = await readAllEntries();
-    if(!entries.length){
-      const fallback = cloneSeed().entries || [];
-      if(fallback.length){
-        await Promise.all(fallback.map(e => store.setJSON(`${ENTRY_PREFIX}${String(e.id)}`, e)));
-        entries = fallback;
-      }
-    }
-    entries.sort((a,b)=>String(b.date+b.time).localeCompare(String(a.date+a.time)));
-    return Response.json({ ...catalog, entries }, { headers:{'Cache-Control':'no-store'} });
+    const { catalog, entryBlobs } = await ensureMigrated();
+    const entries = await readEntriesFromBlobs(entryBlobs);
+
+    entries.sort((a,b)=>
+      String((b.date||'')+(b.time||''))
+        .localeCompare(String((a.date||'')+(a.time||'')))
+    );
+
+    return Response.json(
+      { ...catalog, entries },
+      { headers:{'Cache-Control':'no-store'} }
+    );
   }catch(err){
-    return Response.json({ok:false,error:String(err?.message||err)},{status:500,headers:{'Cache-Control':'no-store'}});
+    console.error('[data] failed to load database', err);
+    return Response.json(
+      { ok:false, error:'Não foi possível carregar os dados agora.' },
+      { status:500, headers:{'Cache-Control':'no-store'} }
+    );
   }
 };
