@@ -605,6 +605,25 @@ function renderHistory(){
     </div>`
   }).join('');
 }
+function applyHostMode(){
+  const host=window.location.hostname.toLowerCase();
+  const isBarberHost=host==='barbeiros.elevatebarbershop.ie'||host.startsWith('barbeiros.');
+  if(!isBarberHost)return;
+  document.body.classList.add('ipad-mode');
+  if(nav) nav.style.display='none';
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  const page=document.getElementById('ipad');
+  if(page){
+    page.classList.add('active');
+    const h1=page.querySelector('h1'); if(h1) h1.textContent='Área dos Barbeiros';
+    const sub=page.querySelector('.sub'); if(sub) sub.textContent='Lançamentos rápidos • Elevate Barber Shop';
+  }
+  const s1=document.getElementById('ipadStep1'), s2=document.getElementById('ipadStep2');
+  if(s1) s1.style.display='block';
+  if(s2) s2.style.display='none';
+  document.title='Elevate Barber Shop — Área dos Barbeiros';
+  if(typeof renderIpad==='function') renderIpad();
+}
 function openBarberPage(){
   const w=window.open('', '_blank');
   if(!w){alert('O navegador bloqueou a nova página. Permita pop-ups para este sistema.');return}
@@ -1273,7 +1292,7 @@ function ipadSave(){
  renderIpad();
 }
 
-navInit();render();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
+navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v5.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
