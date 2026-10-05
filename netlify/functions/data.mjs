@@ -7,7 +7,6 @@ const LEGACY_KEY = 'database';
 const ENTRY_PREFIX = 'entries/';
 
 function cloneSeed(){ return structuredClone(seed); }
-
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
 
 async function blobGet(key, options={type:'json'}, attempts=3){
@@ -23,63 +22,98 @@ async function blobGet(key, options={type:'json'}, attempts=3){
   throw lastError;
 }
 
+async function safeGet(key, options={type:'json'}){
+  try{
+    return await blobGet(key, options);
+  }catch(err){
+    console.error('[data] blob read failed', key, err);
+    return null;
+  }
+}
+
 async function listEntries(){
-  const result = await store.list({ prefix: ENTRY_PREFIX });
-  return result?.blobs || [];
+  try{
+    const result = await store.list({ prefix: ENTRY_PREFIX });
+    return result?.blobs || [];
+  }catch(err){
+    console.error('[data] entry list failed', err);
+    return [];
+  }
 }
 
 async function readEntriesFromBlobs(blobs){
   if(!blobs?.length) return [];
   const rows = await Promise.all(
-    blobs.map(b => blobGet(b.key, { type:'json' }))
+    blobs.map(async b=>{
+      try{
+        return await blobGet(b.key, { type:'json' });
+      }catch(err){
+        console.error('[data] skipping unreadable entry', b.key, err);
+        return null;
+      }
+    })
   );
   return rows.filter(Boolean);
 }
 
-async function ensureMigrated(){
-  let catalog = await blobGet(CATALOG_KEY, { type:'json' });
+function catalogFromSource(source){
+  return {
+    settings: source?.settings || cloneSeed().settings,
+    barbers: Array.isArray(source?.barbers) ? source.barbers : [],
+    services: Array.isArray(source?.services) ? source.services : [],
+    products: Array.isArray(source?.products) ? source.products : []
+  };
+}
 
-  // Fast path: the catalog and individual entry blobs already exist.
-  // Do not read the legacy database on every /api/data request.
+async function ensureMigrated(){
+  let catalog = await safeGet(CATALOG_KEY, { type:'json' });
   let entryBlobs = await listEntries();
+
+  // Normal case: catalog and entry blobs are already available.
   if(catalog && entryBlobs.length) return { catalog, entryBlobs };
 
-  const legacy = await blobGet(LEGACY_KEY, { type:'json' });
+  // Recover legacy data only when something is missing. A failed read must
+  // never make the public GET /api/data endpoint return HTTP 500.
+  const legacy = await safeGet(LEGACY_KEY, { type:'json' });
   const source = legacy || cloneSeed();
 
   if(!catalog){
-    catalog = {
-      settings: source.settings,
-      barbers: source.barbers || [],
-      services: source.services || [],
-      products: source.products || []
-    };
-    await store.setJSON(CATALOG_KEY, catalog);
+    catalog = catalogFromSource(source);
+    try{
+      await store.setJSON(CATALOG_KEY, catalog);
+    }catch(err){
+      console.error('[data] catalog recovery write failed', err);
+    }
   }else{
-    // Corrige catálogo incompleto sem substituir estoque/preços existentes.
     let changed=false;
-    if(!catalog.settings) { catalog.settings=source.settings; changed=true; }
-    if(!Array.isArray(catalog.barbers)||!catalog.barbers.length) { catalog.barbers=source.barbers||[]; changed=true; }
-    if(!Array.isArray(catalog.services)||!catalog.services.length) { catalog.services=source.services||[]; changed=true; }
-    if(!Array.isArray(catalog.products)||!catalog.products.length) { catalog.products=source.products||[]; changed=true; }
-    if(changed) await store.setJSON(CATALOG_KEY,catalog);
+    const fallback=cloneSeed();
+    if(!catalog.settings) { catalog.settings=source.settings || fallback.settings; changed=true; }
+    if(!Array.isArray(catalog.barbers)||!catalog.barbers.length) { catalog.barbers=source.barbers || fallback.barbers; changed=true; }
+    if(!Array.isArray(catalog.services)||!catalog.services.length) { catalog.services=source.services || fallback.services; changed=true; }
+    if(!Array.isArray(catalog.products)||!catalog.products.length) { catalog.products=source.products || fallback.products; changed=true; }
+    if(changed){
+      try{ await store.setJSON(CATALOG_KEY,catalog); }
+      catch(err){ console.error('[data] catalog repair write failed', err); }
+    }
   }
 
   if(!entryBlobs.length){
-    const sourceEntries = Array.isArray(source.entries) && source.entries.length
+    const sourceEntries = Array.isArray(source?.entries) && source.entries.length
       ? source.entries
       : (cloneSeed().entries || []);
 
     if(sourceEntries.length){
-      await Promise.all(
-        sourceEntries.map(entry =>
-          store.setJSON(
+      for(const entry of sourceEntries){
+        try{
+          await store.setJSON(
             ENTRY_PREFIX + String(entry.id),
             entry,
             { onlyIfNew:true }
-          )
-        )
-      );
+          );
+        }catch(err){
+          console.error('[data] entry recovery write failed', entry?.id, err);
+        }
+      }
     }
     entryBlobs = await listEntries();
   }
@@ -98,14 +132,23 @@ export default async () => {
     );
 
     return Response.json(
-      { ...catalog, entries },
+      { ...catalog, entries, ok:true },
       { headers:{'Cache-Control':'no-store'} }
     );
   }catch(err){
+    // Last-resort fallback: the admin/iPad must still receive valid JSON.
+    // We do not overwrite the remote database in this path.
     console.error('[data] failed to load database', err);
+    const fallback=cloneSeed();
     return Response.json(
-      { ok:false, error:'Não foi possível carregar os dados agora.' },
-      { status:500, headers:{'Cache-Control':'no-store'} }
+      {
+        ...catalogFromSource(fallback),
+        entries:Array.isArray(fallback.entries) ? fallback.entries : [],
+        ok:false,
+        degraded:true,
+        error:'Banco remoto temporariamente indisponível.'
+      },
+      { status:200, headers:{'Cache-Control':'no-store'} }
     );
   }
 };
