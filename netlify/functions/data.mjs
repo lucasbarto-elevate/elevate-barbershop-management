@@ -98,26 +98,7 @@ async function ensureMigrated(){
     }
   }
 
-  if(!entryBlobs.length){
-    const sourceEntries = Array.isArray(source?.entries) && source.entries.length
-      ? source.entries
-      : (cloneSeed().entries || []);
-
-    if(sourceEntries.length){
-      for(const entry of sourceEntries){
-        try{
-          await store.setJSON(
-            ENTRY_PREFIX + String(entry.id),
-            entry,
-            { onlyIfNew:true }
-          );
-        }catch(err){
-          console.error('[data] entry recovery write failed', entry?.id, err);
-        }
-      }
-    }
-    entryBlobs = await listEntries();
-  }
+  // An empty online launch history is valid. Never repopulate it from the seed.
 
   return { catalog, entryBlobs };
 }
