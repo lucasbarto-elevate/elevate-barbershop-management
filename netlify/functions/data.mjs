@@ -5,6 +5,7 @@ const store = getStore({ name:'elevate-db', consistency:'strong' });
 const CATALOG_KEY = 'catalog';
 const LEGACY_KEY = 'database';
 const ENTRY_PREFIX = 'entries/';
+const VERSION_KEY = 'sync-version';
 
 function cloneSeed(){ return structuredClone(seed); }
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
@@ -125,6 +126,7 @@ export default async () => {
   try{
     const { catalog, entryBlobs } = await ensureMigrated();
     const entries = await readEntriesFromBlobs(entryBlobs);
+    const version = await safeGet(VERSION_KEY,{type:'json'});
 
     entries.sort((a,b)=>
       String((b.date||'')+(b.time||''))
@@ -132,7 +134,7 @@ export default async () => {
     );
 
     return Response.json(
-      { ...catalog, entries, ok:true },
+      { ...catalog, entries, version:version?.version||0, ok:true },
       { headers:{'Cache-Control':'no-store'} }
     );
   }catch(err){
