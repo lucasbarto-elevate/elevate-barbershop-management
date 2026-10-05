@@ -163,11 +163,14 @@ export default async (req)=>{
       await store.setJSON(CATALOG_KEY,catalog);
     }
 
+    let version=await store.get(VERSION_KEY,{type:'json'});
     if(body.catalog || stockChanged || incoming.length || deletedIds.length){
-      await store.setJSON(VERSION_KEY,{version:Date.now(),updatedAt:new Date().toISOString()});
+      version={version:Date.now(),updatedAt:new Date().toISOString()};
+      await store.setJSON(VERSION_KEY,version);
     }
     return Response.json({
       ok:true,
+      version:version?.version||0,
       catalog,
       entries:incoming,
       deletedIds,
