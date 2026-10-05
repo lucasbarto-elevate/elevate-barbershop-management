@@ -17,7 +17,7 @@ nav{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.navbtn{border:
 main{max-width:1220px;margin:28px auto;padding:0 20px}.page{display:none}.page.active{display:block}
 h1{margin:0 0 5px;font-size:29px;letter-spacing:-.02em}.sub{color:var(--muted);margin-bottom:22px}
 .grid{display:grid;gap:14px}.stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:18px}.cards{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 3px 14px #0000000b}.cash-filter-card{cursor:pointer;transition:.15s}.cash-filter-card:hover{border-color:#000;transform:translateY(-1px)}.cash-filter-card.selected{background:#000;color:#fff;border-color:#000}.cash-filter-card.selected .label,.cash-filter-card.selected .small{color:#fff}.cash-period-card{cursor:pointer;transition:.15s;border:2px solid var(--border);min-height:108px}.cash-period-card:hover{border-color:#000;transform:translateY(-1px)}.cash-period-card.selected{background:#000;color:#fff;border-color:#000}.cash-period-card.selected .label,.cash-period-card.selected .small{color:#fff}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 3px 14px #0000000b}.cash-filter-card{cursor:pointer;transition:.15s}.cash-filter-card:hover{border-color:#000;transform:translateY(-1px)}.cash-filter-card.selected{background:#000;color:#fff;border-color:#000}.cash-filter-card.selected .label,.cash-filter-card.selected .small{color:#fff}.cash-period-card{cursor:pointer;transition:.15s;border:2px solid var(--border);min-height:118px}.cash-period-card:hover{border-color:#000;transform:translateY(-1px)}.cash-period-card.selected{background:#000;color:#fff;border-color:#000}.cash-period-card.selected .label,.cash-period-card.selected .small{color:#fff}@media(max-width:800px){.cash-period-card{min-height:105px}.cash-period-card .value{font-size:20px!important}}
 .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.value{font-size:26px;font-weight:800;margin-top:6px}.small{font-size:13px;color:var(--muted)}
 .toolbar{display:flex;gap:10px;justify-content:space-between;align-items:center;margin:14px 0;flex-wrap:wrap}
 button,.btn{border:1px solid #cfcfcf;background:#fff;color:#000;padding:11px 15px;border-radius:10px;cursor:pointer;font-weight:700;min-height:42px}button:active{transform:scale(.98)}.primary{background:#000;color:#fff;border-color:#000}.danger{color:var(--danger)}
@@ -135,29 +135,46 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <section id="cash" class="page"><h1>Caixa / Lançamentos</h1><div class="sub">Registros por barbeiro, pagamento e gorjeta</div>
 <div class="toolbar"><div><strong>Resumo do Caixa</strong><div class="small">Consulte qualquer período: dia, semana, mês, ano ou datas personalizadas.</div></div><button class="primary" onclick="openEntry()">+ Novo lançamento</button></div>
 <div class="card" style="margin-bottom:16px">
-  <div style="margin-bottom:12px"><strong>Período do Caixa</strong><div class="small">Escolha rapidamente o período ou consulte qualquer data personalizada.</div></div>
-  <div class="grid stats" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px">
+  <div class="bar">
+    <div><strong>Período do Caixa</strong><div class="small">Clique no período que deseja consultar. Os lançamentos abaixo serão filtrados automaticamente.</div></div>
+    <span id="cashPeriodLabel" class="badge">Hoje</span>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px">
     <button type="button" class="card cash-period-card" data-period="today" onclick="setCashPeriod('today')" style="text-align:left">
-      <div class="label">Dia</div><div class="value" style="font-size:22px">Hoje</div><div class="small">Somente hoje</div>
+      <div class="label">Hoje</div>
+      <div class="value" style="font-size:24px" id="cashCardTodayValue">€0.00</div>
+      <div class="small" id="cashCardTodayRange">Hoje</div>
     </button>
     <button type="button" class="card cash-period-card" data-period="week" onclick="setCashPeriod('week')" style="text-align:left">
-      <div class="label">Semana</div><div class="value" style="font-size:22px">Esta semana</div><div class="small">Segunda a domingo</div>
+      <div class="label">Esta semana</div>
+      <div class="value" style="font-size:24px" id="cashCardWeekValue">€0.00</div>
+      <div class="small" id="cashCardWeekRange">Segunda a domingo</div>
     </button>
     <button type="button" class="card cash-period-card" data-period="month" onclick="setCashPeriod('month')" style="text-align:left">
-      <div class="label">Mês</div><div class="value" style="font-size:22px">Este mês</div><div class="small">Do dia 1 ao último dia</div>
+      <div class="label">Este mês</div>
+      <div class="value" style="font-size:24px" id="cashCardMonthValue">€0.00</div>
+      <div class="small" id="cashCardMonthRange">Do dia 1 ao último dia</div>
     </button>
     <button type="button" class="card cash-period-card" data-period="year" onclick="setCashPeriod('year')" style="text-align:left">
-      <div class="label">Ano</div><div class="value" style="font-size:22px">Este ano</div><div class="small">Janeiro a dezembro</div>
+      <div class="label">Este ano</div>
+      <div class="value" style="font-size:24px" id="cashCardYearValue">€0.00</div>
+      <div class="small" id="cashCardYearRange">Janeiro a dezembro</div>
     </button>
   </div>
-  <div class="card" style="background:#f8f8f8">
-    <div class="bar"><div><strong>Consulta personalizada</strong><div class="small">Escolha qualquer dia ou intervalo de datas.</div></div><span class="badge">Personalizado</span></div>
-    <div class="grid cards" style="margin-top:12px">
-      <div><label>Data inicial</label><input id="cashFrom" type="date" onchange="setCashCustomRange()"></div>
-      <div><label>Data final</label><input id="cashTo" type="date" onchange="setCashCustomRange()"></div>
+
+  <div class="card" style="margin-top:14px;background:#f8f8f8">
+    <div class="bar">
+      <div><strong>Consultar uma data específica ou período</strong><div class="small">Para consultar um único dia, use a mesma data nos dois campos.</div></div>
+      <button type="button" class="primary" onclick="setCashCustomRange()">Consultar</button>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+      <div><label>Data inicial</label><input id="cashFrom" type="date"></div>
+      <div><label>Data final</label><input id="cashTo" type="date"></div>
     </div>
   </div>
 </div>
+<div class="grid stats" id="cashStats"></div>
 <div class="grid stats" id="cashStats"></div>
 <table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Pag. produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
 
@@ -750,31 +767,6 @@ function cashDateRange(type){
   return {from,to};
 }
 let cashPeriod='today';
-function updateCashPeriodCards(){
-  document.querySelectorAll('.cash-period-card').forEach(el=>{
-    el.classList.toggle('selected',el.dataset.period===cashPeriod);
-  });
-}
-function setCashPeriod(type){
-  cashPeriod=type;
-  const r=cashDateRange(type);
-  const fromEl=document.getElementById('cashFrom');
-  const toEl=document.getElementById('cashTo');
-  if(fromEl) fromEl.value=r.from;
-  if(toEl) toEl.value=r.to;
-  updateCashPeriodCards();
-  renderCash();
-}
-function setCashCustomRange(){
-  cashPeriod='custom';
-  const fromEl=document.getElementById('cashFrom');
-  const toEl=document.getElementById('cashTo');
-  if(fromEl && toEl && fromEl.value && toEl.value && fromEl.value>toEl.value){
-    toEl.value=fromEl.value;
-  }
-  updateCashPeriodCards();
-  renderCash();
-}
 function cashPeriodStats(from,to){
   const es=db.entries.filter(e=>(!from||e.date>=from)&&(!to||e.date<=to));
   return {
@@ -784,6 +776,44 @@ function cashPeriodStats(from,to){
     products:es.reduce((s,e)=>s+entryProductTotal(e),0),
     tips:es.reduce((s,e)=>s+Number(e.tip||0),0)
   };
+}
+function updateCashPeriodCards(){
+  const periods=['today','week','month','year'];
+  const ids={today:'Today',week:'Week',month:'Month',year:'Year'};
+  periods.forEach(type=>{
+    const r=cashDateRange(type);
+    const p=cashPeriodStats(r.from,r.to);
+    const v=document.getElementById('cashCard'+ids[type]+'Value');
+    const range=document.getElementById('cashCard'+ids[type]+'Range');
+    if(v)v.textContent=money(p.revenue);
+    if(range)range.textContent=r.from===r.to?r.from:(r.from+' → '+r.to);
+  });
+  document.querySelectorAll('.cash-period-card').forEach(el=>{
+    el.classList.toggle('selected',el.dataset.period===cashPeriod);
+  });
+  const label=document.getElementById('cashPeriodLabel');
+  if(label){
+    label.textContent=cashPeriod==='today'?'Hoje':cashPeriod==='week'?'Esta semana':cashPeriod==='month'?'Este mês':cashPeriod==='year'?'Este ano':'Personalizado';
+  }
+}
+function setCashPeriod(type){
+  cashPeriod=type;
+  const r=cashDateRange(type);
+  const fromEl=document.getElementById('cashFrom');
+  const toEl=document.getElementById('cashTo');
+  if(fromEl)fromEl.value=r.from;
+  if(toEl)toEl.value=r.to;
+  updateCashPeriodCards();
+  renderCash();
+}
+function setCashCustomRange(){
+  const fromEl=document.getElementById('cashFrom');
+  const toEl=document.getElementById('cashTo');
+  if(!fromEl?.value||!toEl?.value)return alert('Selecione a data inicial e a data final.');
+  if(fromEl.value>toEl.value)return alert('A data inicial não pode ser maior que a data final.');
+  cashPeriod='custom';
+  updateCashPeriodCards();
+  renderCash();
 }
 let cashFilter='all';
 function cashHasServices(e){return getServiceItems(e).some(x=>Number(x.qty||0)>0)||Number(e.serviceTotal||0)>0;}
