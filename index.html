@@ -358,6 +358,8 @@ function barberServiceCommissionRate(b){return isShopBarber(b)?0:Number(b?.commi
 let remoteLoaded=false;
 let syncInFlight=false;
 let syncRetryTimer=null;
+let remoteVersion=null;
+let versionCheckInFlight=false;
 async function syncRemoteNow(){
  if(!navigator.onLine){ updateConnectionStatus(); return false; }
  if(syncInFlight) return false;
@@ -376,14 +378,24 @@ async function syncRemoteNow(){
    clearTimeout(timeout);
    if(!r.ok) throw new Error('sync');
    const out=await r.json();
-   if(!out.db) throw new Error('sync-response');
-   db=out.db;
-   pendingSync=[];
-   pendingDeletes=[];
+   if(!out.ok||!out.catalog) throw new Error('sync-response');
+   db.settings=out.catalog.settings;
+   db.barbers=out.catalog.barbers||db.barbers;
+   db.services=out.catalog.services||db.services;
+   db.products=out.catalog.products||db.products;
+   const accepted=Array.isArray(out.entries)?out.entries:[];
+   for(const e of accepted){
+     const i=db.entries.findIndex(x=>String(x.id)===String(e.id));
+     if(i>=0) db.entries[i]=e; else db.entries.push(e);
+   }
+   for(const id of (out.deletedIds||[])) db.entries=db.entries.filter(e=>String(e.id)!==String(id));
+   remoteVersion=out.version||remoteVersion;
+   pendingSync=pendingSync.filter(id=>!accepted.some(e=>String(e.id)===String(id)));
+   pendingDeletes=pendingDeletes.filter(id=>!(out.deletedIds||[]).map(String).includes(String(id)));
    catalogDirty=false;
    localStorage.setItem(key,JSON.stringify(db));
-   localStorage.setItem(syncKey,'[]');
-   localStorage.setItem(deleteSyncKey,'[]');
+   localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+   localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
    localStorage.removeItem(catalogSyncKey);
    updateConnectionStatus(); render();
    return true;
@@ -419,44 +431,37 @@ function queueDelete(id){
  if(navigator.onLine) syncRemoteNow();
 }
 async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
-async function loadRemote(){
+async function loadRemote(force=false){
  if(!navigator.onLine){updateConnectionStatus();return;}
- // Nunca substitui uma base local válida por uma resposta remota incompleta.
  const staleCatalogOnly=catalogDirty && !pendingSync.length && !pendingDeletes.length && !(db.entries||[]).length;
  if(syncInFlight || pendingSync.length || pendingDeletes.length || (catalogDirty && !staleCatalogOnly)){updateConnectionStatus();return;}
  try{
+   const vr=await fetch('/api/version',{cache:'no-store'});
+   if(!vr.ok) throw new Error('version-http-'+vr.status);
+   const vs=await vr.json();
+   if(!vs.ok) throw new Error('version-response');
+   if(!force && remoteLoaded && String(vs.version||'')===String(remoteVersion||'')){
+     updateConnectionStatus(); return;
+   }
    const r=await fetch('/api/data',{cache:'no-store'});
    if(!r.ok) throw new Error('data-http-'+r.status);
    const remote=await r.json();
-   const validCatalog=remote
-     && remote.settings
+   const validCatalog=remote && remote.settings
      && Array.isArray(remote.barbers) && remote.barbers.length>0
      && Array.isArray(remote.services) && remote.services.length>0
      && Array.isArray(remote.products) && remote.products.length>0
      && Array.isArray(remote.entries);
    if(!validCatalog) throw new Error('invalid-remote-database');
-   // Recovery: if the online database has no launches but this browser still
-   // has locally saved launches, preserve them and push them back online.
-   // This protects launches created before the sync queue was introduced.
-   if(remote.entries.length===0 && Array.isArray(db.entries) && db.entries.length>0){
-     pendingSync=[...new Set(db.entries.map(e=>e.id).filter(id=>id!=null))];
-     localStorage.setItem(syncKey,JSON.stringify(pendingSync));
-     updateConnectionStatus();
-     await syncRemoteNow();
-     return;
-   }
    db=remote;
+   remoteVersion=remote.version||vs.version||null;
    db.products=(db.products||[]).map(p=>({...p,commission:Number(p.commission||0)}));
    db.barbers=(db.barbers||[]).map(b=>b.name==='Elevate Barbershop'?{...b,commission:0}:b);
    remoteLoaded=true;
    localStorage.setItem(key,JSON.stringify(db));
-   if(staleCatalogOnly){
-     catalogDirty=false;
-     localStorage.removeItem(catalogSyncKey);
-   }
+   if(staleCatalogOnly){catalogDirty=false;localStorage.removeItem(catalogSyncKey);}
    render();updateConnectionStatus();
  }catch(e){
-   console.error('[Elevate] Falha ao carregar banco remoto:',e);
+   console.error('[Elevate] Falha ao sincronizar banco remoto:',e);
    updateConnectionStatus();
  }
 }
@@ -466,7 +471,7 @@ function updateConnectionStatus(){
  el.textContent=navigator.onLine?(pending?'● Online · '+pending+' pendente(s)':'● Online · sincronizado'):'● Offline · dados guardados neste dispositivo';
  el.style.fontWeight='700';
 }
-window.addEventListener('online',()=>{updateConnectionStatus();syncRemoteNow();loadRemote()});
+window.addEventListener('online',()=>{updateConnectionStatus();syncRemoteNow();loadRemote(true)});
 window.addEventListener('offline',updateConnectionStatus);
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function money(n){return db.settings.currency+Number(n).toFixed(2)}
@@ -1323,7 +1328,7 @@ async function ipadSave(){
  renderIpad();
 }
 
-navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
+navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},2500);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v5.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
