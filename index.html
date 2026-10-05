@@ -1303,9 +1303,10 @@ async function ipadSave(){
      const timeout=setTimeout(()=>controller.abort(),8000);
      const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:[entry],deletedIds:[],catalog:null}),signal:controller.signal});
      clearTimeout(timeout);
-     if(!r.ok) throw new Error('sync-http-'+r.status);
-     const out=await r.json();
-     if(!out.ok||!out.catalog) throw new Error('sync-response');
+     let out=null;
+     try{out=await r.json();}catch(_){}
+     if(!r.ok) throw new Error('sync-http-'+r.status+(out?.error?': '+out.error:''));
+     if(!out?.ok||!out.catalog) throw new Error('sync-response');
      db.settings=out.catalog.settings;
      db.barbers=out.catalog.barbers||db.barbers;
      db.services=out.catalog.services||db.services;
@@ -1321,8 +1322,25 @@ async function ipadSave(){
      localStorage.setItem(syncKey,JSON.stringify(pendingSync));
      onlineSaved=true;
    }catch(e){
-     backendOnline=false;
-     console.error('[Elevate] lançamento online falhou; guardando localmente',e);
+     console.error('[Elevate] lançamento online falhou; verificando se foi gravado no banco...',e);
+     // A gravação pode ter concluído no servidor mesmo que a resposta tenha falhado.
+     // Confirma pelo banco antes de colocar o lançamento na fila offline.
+     try{
+       const check=await fetch('/api/data',{cache:'no-store'});
+       if(check.ok){
+         const remote=await check.json();
+         const found=Array.isArray(remote.entries)&&remote.entries.some(x=>String(x.id)===String(entry.id));
+         if(found){
+           db=remote;
+           remoteVersion=remote.version||remoteVersion;
+           remoteLoaded=true;
+           backendOnline=true;
+           localStorage.setItem(key,JSON.stringify(db));
+           onlineSaved=true;
+         }
+       }
+     }catch(_){}
+     if(!onlineSaved) backendOnline=false;
    }
  }
  if(!onlineSaved){
