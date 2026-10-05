@@ -1301,10 +1301,19 @@ async function ipadSave(){
      clearTimeout(timeout);
      if(!r.ok) throw new Error('sync-http-'+r.status);
      const out=await r.json();
-     if(!out.ok||!out.db) throw new Error('sync-response');
-     db=out.db;
+     if(!out.ok||!out.catalog) throw new Error('sync-response');
+     db.settings=out.catalog.settings;
+     db.barbers=out.catalog.barbers||db.barbers;
+     db.services=out.catalog.services||db.services;
+     db.products=out.catalog.products||db.products;
+     const saved=Array.isArray(out.entries)?out.entries:[];
+     for(const e of saved){
+       const pos=db.entries.findIndex(x=>String(x.id)===String(e.id));
+       if(pos>=0) db.entries[pos]=e; else db.entries.push(e);
+     }
      localStorage.setItem(key,JSON.stringify(db));
-     pendingSync=pendingSync.filter(id=>String(id)!==String(entry.id));
+     remoteVersion=out.version||remoteVersion;
+     pendingSync=pendingSync.filter(id=>!saved.some(e=>String(e.id)===String(id)));
      localStorage.setItem(syncKey,JSON.stringify(pendingSync));
      onlineSaved=true;
    }catch(e){
