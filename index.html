@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<link rel="manifest" href="manifest.json?v=3">
+<link rel="manifest" href="manifest.json?v=5">
 <meta name="theme-color" content="#000000">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -175,7 +175,6 @@ body.ipad-mode .ipad-page h1{font-size:34px}
   </div>
 </div>
 <div class="grid stats" id="cashStats"></div>
-<div class="grid stats" id="cashStats"></div>
 <table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Pag. produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
 
 <section id="commissions" class="page"><h1>Comissões</h1><div class="sub">Fechamento por barbeiro</div>
@@ -272,7 +271,7 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <br><div class="card"><strong>Permissões</strong><p class="small">Administrador: acesso completo, edição/exclusão e fechamento. Barbeiro: registra seus atendimentos e consulta suas próprias comissões.</p></div>
 </section>
 </main>
-<footer>MVP de gestão para barbearia — dados locais protegidos para uso offline. <span id="syncStatus">● Online</span></footer>
+<footer>MVP de gestão para barbearia — dados locais protegidos para uso offline. <span id="syncStatus">● Online</span> · <span>v2026.10.05.1</span></footer>
 
 <div class="modal" id="modal"><div class="modalbox"><div class="modalhead"><h2 id="modalTitle"></h2><button onclick="closeModal()">✕</button></div><div id="modalBody"></div></div></div>
 
@@ -831,7 +830,7 @@ function renderCash(){
     ['tips','Caixinhas',money(p.tips)],
     ['entries','Lançamentos',p.es.length]
   ];
-  cashStats.innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div><div class="small">'+from+' → '+to+'</div></button>').join('');
+  document.getElementById('cashStats').innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div><div class="small">'+from+' → '+to+'</div></button>').join('');
   let es=p.es.slice();
   if(cashFilter==='services') es=es.filter(cashHasServices);
   else if(cashFilter==='products') es=es.filter(cashHasProducts);
@@ -844,7 +843,7 @@ function renderCash(){
     const productPay=pt>0?(e.productPayment||e.productPay||'—'):'—';
     return '<tr><td>'+e.date+' '+e.time+'</td><td>'+barberName(e.barber)+'</td><td>'+(e.service||'—')+'</td><td>'+(e.productName||'—')+'</td><td>'+servicePay+'</td><td>'+productPay+'</td><td>'+money(tip)+'</td><td>'+(tip?(e.tipPayment||'Cash'):'—')+'</td><td><b>'+money(st+pt)+'</b></td><td><button onclick="openEntry('+e.id+')">Editar</button> <button class="danger" onclick="delEntry('+e.id+')">Excluir</button></td></tr>';
   }).join('');
-  entryList.innerHTML='<tr><td colspan="10" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s) · período '+from+' → '+to+'</td></tr>'+rows;
+  document.getElementById('entryList').innerHTML='<tr><td colspan="10" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s) · período '+from+' → '+to+'</td></tr>'+rows;
 }
 function renderCommissions(){
   const from=document.getElementById('commFrom')?.value||'';
@@ -1205,6 +1204,6 @@ function ipadSave(){
 }
 
 navInit();render();setDashboardPeriod('month');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v3.js',{updateViaCache:'none'}).catch(()=>{});}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v4.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
