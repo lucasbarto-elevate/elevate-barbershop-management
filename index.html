@@ -1047,6 +1047,31 @@ function updateEntryEditPreview(){
 }
 function editServiceChanged(){updateEntryEditPreview()}
 function editProductChanged(){updateEntryEditPreview()}
+function productQtyMapForEntry(entry){
+  const map={};
+  if(!entry)return map;
+  getProductItems(entry).forEach(x=>{
+    const id=Number(x.id);
+    if(!id)return;
+    map[id]=(map[id]||0)+Math.max(0,Number(x.qty||0));
+  });
+  return map;
+}
+function adjustLocalStockForEntryChange(oldEntry,newEntry){
+  const oldMap=productQtyMapForEntry(oldEntry);
+  const newMap=productQtyMapForEntry(newEntry);
+  const ids=new Set([...Object.keys(oldMap),...Object.keys(newMap)]);
+  const changes=[];
+  ids.forEach(id=>{
+    const delta=(newMap[id]||0)-(oldMap[id]||0);
+    if(!delta)return;
+    const p=db.products.find(x=>Number(x.id)===Number(id));
+    if(!p)throw new Error('Produto não encontrado para atualizar o estoque.');
+    if(delta>0 && Number(p.stock||0)<delta)throw new Error('Estoque insuficiente para '+p.name+'.');
+    changes.push({p,delta});
+  });
+  changes.forEach(({p,delta})=>{p.stock=Number(p.stock||0)-delta;});
+}
 function saveEntry(id){
   const old=db.entries.find(x=>String(x.id)===String(id))||null;
   const get=x=>document.getElementById(x);
