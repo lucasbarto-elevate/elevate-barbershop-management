@@ -1267,7 +1267,7 @@ function ipadUpdate(){
  <div style="margin-top:8px"><b>Total: ${money(st+pt)}</b></div>`;
 }
 function ipadBack(){ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};ipadStep2.style.display='none';ipadStep1.style.display='block';renderIpad()}
-function ipadSave(){
+async function ipadSave(){
  const services=Object.entries(ipadState.serviceItems).filter(([,q])=>q>0).map(([id,q])=>{let s=db.services.find(x=>x.id==id);return s?{id:s.id,name:s.name,qty:q,unitPrice:s.price}:null}).filter(Boolean);
  const products=Object.entries(ipadState.productItems).filter(([,q])=>q>0).map(([id,q])=>{let p=db.products.find(x=>x.id==id);return p?{id:p.id,name:p.name,qty:q,unitPrice:p.price,commission:Number(p.commission||0)}:null}).filter(Boolean);
  const tip=Number(ipadTip.value||0);
@@ -1280,25 +1280,46 @@ function ipadSave(){
  const serviceTotal=services.reduce((a,x)=>a+x.qty*x.unitPrice,0), productTotal=products.reduce((a,x)=>a+x.qty*x.unitPrice,0);
  const serviceNames=services.map(x=>`${x.qty}× ${x.name}`).join(' + ');
  const productNames=products.map(x=>`${x.qty}× ${x.name}`).join(' + ');
- db.entries.push({
-   id:Date.now(),date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),
+ const entry={
+   id:Date.now()+Math.floor(Math.random()*1000),date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),
    barber:ipadState.barber,clients:services.length?Number(ipadState.clients||1):0,service:serviceNames,serviceItems:services,productName:productNames,productItems:products,
    payment:ipadState.payment,servicePayment:ipadState.payment,productPayment:products.length?ipadState.productPayment:null,
    productId:products.length===1?products[0].id:null,productPrice:productTotal,tip,tipPayment:tip?ipadState.tipPayment:'Cash',
    total:serviceTotal+productTotal
- });
- const savedId=db.entries[db.entries.length-1].id;
- products.forEach(x=>{const p=db.products.find(p=>p.id===x.id);p.stock-=x.qty});
- // Queue only after the stock deduction so the online catalog receives the new stock.
- queueSync({id:savedId});
+ };
+ let onlineSaved=false;
+ if(navigator.onLine){
+   try{
+     const controller=new AbortController();
+     const timeout=setTimeout(()=>controller.abort(),8000);
+     const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:[entry],deletedIds:[],catalog:null}),signal:controller.signal});
+     clearTimeout(timeout);
+     if(!r.ok) throw new Error('sync-http-'+r.status);
+     const out=await r.json();
+     if(!out.ok||!out.db) throw new Error('sync-response');
+     db=out.db;
+     localStorage.setItem(key,JSON.stringify(db));
+     pendingSync=pendingSync.filter(id=>String(id)!==String(entry.id));
+     localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+     onlineSaved=true;
+   }catch(e){
+     console.error('[Elevate] lançamento online falhou; guardando localmente',e);
+   }
+ }
+ if(!onlineSaved){
+   db.entries.push(entry);
+   products.forEach(x=>{const p=db.products.find(p=>p.id===x.id);if(p)p.stock-=x.qty});
+   localStorage.setItem(key,JSON.stringify(db));
+   queueSync(entry);
+ }
  const lowAfter=lowStockProducts();
  if(lowAfter.length){ setTimeout(()=>{ alert('⚠️ Estoque acabando: '+lowAfter.map(p=>`${p.name} (${p.stock} un.)`).join(', ')); renderStockAlert(); },120); }
- alert(navigator.onLine?'✓ Lançamento registrado com sucesso!':'✓ Lançamento guardado no iPad. Será sincronizado quando a internet voltar.');
+ alert(onlineSaved?'✓ Lançamento confirmado no banco online!':'✓ Lançamento guardado no iPad. Será sincronizado quando a internet voltar.');
  ipadTip.value=0;
  ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};
  ipadStep2.style.display='none';
  ipadStep1.style.display='block';
- save({syncCatalog:false});
+ render();
  renderIpad();
 }
 
