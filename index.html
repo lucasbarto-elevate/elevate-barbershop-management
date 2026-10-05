@@ -360,8 +360,8 @@ let syncInFlight=false;
 let syncRetryTimer=null;
 let remoteVersion=null;
 let versionCheckInFlight=false;
+let backendOnline=null;
 async function syncRemoteNow(){
- if(!navigator.onLine){ updateConnectionStatus(); return false; }
  if(syncInFlight) return false;
  if(!pendingSync.length && !pendingDeletes.length && !catalogDirty){ updateConnectionStatus(); return true; }
  syncInFlight=true;
@@ -379,6 +379,7 @@ async function syncRemoteNow(){
    if(!r.ok) throw new Error('sync');
    const out=await r.json();
    if(!out.ok||!out.catalog) throw new Error('sync-response');
+     backendOnline=true;
    db.settings=out.catalog.settings;
    db.barbers=out.catalog.barbers||db.barbers;
    db.services=out.catalog.services||db.services;
@@ -397,11 +398,13 @@ async function syncRemoteNow(){
    localStorage.setItem(syncKey,JSON.stringify(pendingSync));
    localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
    localStorage.removeItem(catalogSyncKey);
+   backendOnline=true;
    updateConnectionStatus(); render();
    return true;
  }catch(e){
+   backendOnline=false;
    updateConnectionStatus();
-   if(navigator.onLine && !syncRetryTimer){
+   if(!syncRetryTimer){
      syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;syncRemoteNow();},3000);
    }
    return false;
@@ -415,24 +418,23 @@ function save(options={}){
  localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
  if(catalogDirty) localStorage.setItem(catalogSyncKey,'1');
  render();updateConnectionStatus();
- if(navigator.onLine && (pendingSync.length||pendingDeletes.length||catalogDirty)) syncRemoteNow();
+ if(pendingSync.length||pendingDeletes.length||catalogDirty) syncRemoteNow();
 }
 function queueSync(entry){
  const id=typeof entry==='object'?entry.id:entry;
  if(id!=null && !pendingSync.map(String).includes(String(id))) pendingSync.push(id);
  localStorage.setItem(syncKey,JSON.stringify(pendingSync));
  updateConnectionStatus();
- if(navigator.onLine) syncRemoteNow();
+ syncRemoteNow();
 }
 function queueDelete(id){
  if(id!=null && !pendingDeletes.map(String).includes(String(id))) pendingDeletes.push(id);
  localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
  updateConnectionStatus();
- if(navigator.onLine) syncRemoteNow();
+ syncRemoteNow();
 }
-async function syncPending(){if(!navigator.onLine){updateConnectionStatus();return;} await syncRemoteNow();}
+async function syncPending(){await syncRemoteNow();}
 async function loadRemote(force=false){
- if(!navigator.onLine){updateConnectionStatus();return;}
  const staleCatalogOnly=catalogDirty && !pendingSync.length && !pendingDeletes.length && !(db.entries||[]).length;
  if(syncInFlight || pendingSync.length || pendingDeletes.length || (catalogDirty && !staleCatalogOnly)){updateConnectionStatus();return;}
  try{
@@ -457,10 +459,12 @@ async function loadRemote(force=false){
    db.products=(db.products||[]).map(p=>({...p,commission:Number(p.commission||0)}));
    db.barbers=(db.barbers||[]).map(b=>b.name==='Elevate Barbershop'?{...b,commission:0}:b);
    remoteLoaded=true;
+   backendOnline=true;
    localStorage.setItem(key,JSON.stringify(db));
    if(staleCatalogOnly){catalogDirty=false;localStorage.removeItem(catalogSyncKey);}
    render();updateConnectionStatus();
  }catch(e){
+   backendOnline=false;
    console.error('[Elevate] Falha ao sincronizar banco remoto:',e);
    updateConnectionStatus();
  }
@@ -468,11 +472,11 @@ async function loadRemote(force=false){
 function updateConnectionStatus(){
  const el=document.getElementById('syncStatus');if(!el)return;
  const pending=pendingSync.length+pendingDeletes.length+(catalogDirty?1:0);
- el.textContent=navigator.onLine?(pending?'● Online · '+pending+' pendente(s)':'● Online · sincronizado'):'● Offline · dados guardados neste dispositivo';
+ el.textContent=backendOnline===true?(pending?'● Online · '+pending+' pendente(s)':'● Online · sincronizado'):(backendOnline===false?'● Offline · tentando reconectar…':'● A verificar ligação…');
  el.style.fontWeight='700';
 }
-window.addEventListener('online',()=>{updateConnectionStatus();syncRemoteNow();loadRemote(true)});
-window.addEventListener('offline',updateConnectionStatus);
+window.addEventListener('online',()=>{syncRemoteNow();loadRemote(true)});
+window.addEventListener('offline',()=>{backendOnline=false;updateConnectionStatus();});
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function money(n){return db.settings.currency+Number(n).toFixed(2)}
 function barberName(id){return db.barbers.find(x=>x.id==id)?.name||'—'}
@@ -1293,7 +1297,7 @@ async function ipadSave(){
    total:serviceTotal+productTotal
  };
  let onlineSaved=false;
- if(navigator.onLine){
+ {
    try{
      const controller=new AbortController();
      const timeout=setTimeout(()=>controller.abort(),8000);
@@ -1317,6 +1321,7 @@ async function ipadSave(){
      localStorage.setItem(syncKey,JSON.stringify(pendingSync));
      onlineSaved=true;
    }catch(e){
+     backendOnline=false;
      console.error('[Elevate] lançamento online falhou; guardando localmente',e);
    }
  }
@@ -1337,7 +1342,7 @@ async function ipadSave(){
  renderIpad();
 }
 
-navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},2500);
+navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open'))loadRemote()},5000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v5.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
