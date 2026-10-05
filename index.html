@@ -360,6 +360,7 @@ let syncInFlight=false;
 let syncRetryTimer=null;
 let remoteVersion=null;
 let versionCheckInFlight=false;
+let remoteLoadInFlight=false;
 let backendOnline=null;
 async function syncRemoteNow(){
  if(syncInFlight) return false;
@@ -435,6 +436,8 @@ function queueDelete(id){
 }
 async function syncPending(){await syncRemoteNow();}
 async function loadRemote(force=false){
+ if(remoteLoadInFlight) return;
+ remoteLoadInFlight=true;
  const staleCatalogOnly=catalogDirty && !pendingSync.length && !pendingDeletes.length && !(db.entries||[]).length;
  if(syncInFlight || pendingSync.length || pendingDeletes.length || (catalogDirty && !staleCatalogOnly)){updateConnectionStatus();return;}
  try{
@@ -467,6 +470,8 @@ async function loadRemote(force=false){
    backendOnline=false;
    console.error('[Elevate] Falha ao sincronizar banco remoto:',e);
    updateConnectionStatus();
+ }finally{
+   remoteLoadInFlight=false;
  }
 }
 function updateConnectionStatus(){
@@ -1360,7 +1365,7 @@ async function ipadSave(){
  renderIpad();
 }
 
-navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open'))loadRemote()},5000);
+navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open'))loadRemote()},1500);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v6.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
