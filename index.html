@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<link rel="manifest" href="manifest.json?v=5">
+<link rel="manifest" href="manifest.json?v=6">
 <meta name="theme-color" content="#000000">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -271,7 +271,7 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <br><div class="card"><strong>Permissões</strong><p class="small">Administrador: acesso completo, edição/exclusão e fechamento. Barbeiro: registra seus atendimentos e consulta suas próprias comissões.</p></div>
 </section>
 </main>
-<footer>MVP de gestão para barbearia — dados locais protegidos para uso offline. <span id="syncStatus">● Online</span> · <span>v2026.10.05.1</span></footer>
+<footer>MVP de gestão para barbearia — dados locais protegidos para uso offline. <span id="syncStatus">● Online</span> · <span>v2026.10.05.2</span></footer>
 
 <div class="modal" id="modal"><div class="modalbox"><div class="modalhead"><h2 id="modalTitle"></h2><button onclick="closeModal()">✕</button></div><div id="modalBody"></div></div></div>
 
@@ -1204,6 +1204,6 @@ function ipadSave(){
 }
 
 navInit();render();setDashboardPeriod('month');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v4.js',{updateViaCache:'none'}).catch(()=>{});}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v5.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
