@@ -90,6 +90,10 @@ function mergeCatalogEdits(current,incoming,preserveStock){
   return merged;
 }
 
+async function blobJson(key){
+  return await store.get(key,{type:'json',consistency:'strong'});
+}
+
 async function readAllEntries(){
   const { blobs }=await store.list({prefix:ENTRY_PREFIX});
   if(!blobs?.length) return [];
@@ -110,7 +114,7 @@ export default async (req)=>{
     // cannot create a second stock movement.
     for(const e of incoming){
       const key=`${ENTRY_PREFIX}${e.id}`;
-      const existing=await store.get(key,{type:'json',consistency:'strong'});
+      const existing=await blobJson(key);
       if(existing===null){
         const delta=new Map();
         for(const [id,qty] of productQty(e)) delta.set(id,-qty);
@@ -132,8 +136,9 @@ export default async (req)=>{
           if(oldQty!==newQty) delta.set(id,oldQty-newQty);
         }
         applyStockDelta(catalog,delta);
-        const meta=await store.getMetadata(key);
-        const result=await store.setJSON(key,e,{onlyIfMatch:meta?.etag});
+        const meta=await store.getMetadata(key,{consistency:'strong'});
+        if(!meta?.etag) throw new Error('Lançamento existente sem ETag; recarregue o banco e tente novamente.');
+        const result=await store.setJSON(key,e,{onlyIfMatch:meta.etag});
         if(!result.modified) throw new Error('Lançamento foi alterado por outro dispositivo. Recarregue e tente novamente.');
         stockChanged=stockChanged || delta.size>0;
       }
@@ -179,6 +184,9 @@ export default async (req)=>{
       stockChanged
     },{headers:{'Cache-Control':'no-store'}});
   }catch(err){
-    return Response.json({ok:false,error:String(err?.message||err)},{status:409,headers:{'Cache-Control':'no-store'}});
+    console.error('[sync] failed', err);
+    const message=String(err?.message||err);
+    const status=/Estoque insuficiente|alterado por outro dispositivo|ETag|Falha ao gravar/.test(message)?409:503;
+    return Response.json({ok:false,error:message,retryable:status===503},{status,headers:{'Cache-Control':'no-store'}});
   }
 };
