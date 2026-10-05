@@ -435,6 +435,16 @@ async function loadRemote(){
      && Array.isArray(remote.products) && remote.products.length>0
      && Array.isArray(remote.entries);
    if(!validCatalog) throw new Error('invalid-remote-database');
+   // Recovery: if the online database has no launches but this browser still
+   // has locally saved launches, preserve them and push them back online.
+   // This protects launches created before the sync queue was introduced.
+   if(remote.entries.length===0 && Array.isArray(db.entries) && db.entries.length>0){
+     pendingSync=[...new Set(db.entries.map(e=>e.id).filter(id=>id!=null))];
+     localStorage.setItem(syncKey,JSON.stringify(pendingSync));
+     updateConnectionStatus();
+     await syncRemoteNow();
+     return;
+   }
    db=remote;
    db.products=(db.products||[]).map(p=>({...p,commission:Number(p.commission||0)}));
    db.barbers=(db.barbers||[]).map(b=>b.name==='Elevate Barbershop'?{...b,commission:0}:b);
