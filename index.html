@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<link rel="manifest" href="manifest.json?v=6">
+<link rel="manifest" href="manifest.json?v=7">
 <meta name="theme-color" content="#000000">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1343,6 +1343,6 @@ async function ipadSave(){
 }
 
 navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open'))loadRemote()},5000);
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v5.js',{updateViaCache:'none'}).catch(()=>{});}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v6.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
