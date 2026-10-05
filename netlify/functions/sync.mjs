@@ -5,6 +5,7 @@ const store = getStore({ name:'elevate-db', consistency:'strong' });
 const CATALOG_KEY = 'catalog';
 const LEGACY_KEY = 'database';
 const ENTRY_PREFIX = 'entries/';
+const VERSION_KEY = 'sync-version';
 
 function cloneSeed(){ return structuredClone(seed); }
 
@@ -30,14 +31,8 @@ async function ensureMigrated(){
     if(changed) await store.setJSON(CATALOG_KEY,catalog);
   }
 
-  // If the catalog exists but the individual launch blobs do not,
-  // restore the legacy/seed launches without overwriting existing ones.
-  const existing = await store.list({ prefix: ENTRY_PREFIX });
-  if(!existing.blobs?.length){
-    for(const entry of (source.entries || [])){
-      await store.setJSON(`${ENTRY_PREFIX}${String(entry.id)}`, entry, { onlyIfNew:true });
-    }
-  }
+  // Do not recreate historical/seed launches automatically. Launches are transactional data.
+  // If legacy data exists, it is migrated explicitly by the data endpoint; an empty database stays empty.
   return catalog;
 }
 
@@ -168,11 +163,14 @@ export default async (req)=>{
       await store.setJSON(CATALOG_KEY,catalog);
     }
 
-    let entries=await readAllEntries();
-    entries.sort((a,b)=>String(b.date+b.time).localeCompare(String(a.date+a.time)));
+    if(body.catalog || stockChanged || incoming.length || deletedIds.length){
+      await store.setJSON(VERSION_KEY,{version:Date.now(),updatedAt:new Date().toISOString()});
+    }
     return Response.json({
       ok:true,
-      db:{...catalog,entries},
+      catalog,
+      entries:incoming,
+      deletedIds,
       received:incoming.length,
       deleted:deletedIds.length,
       stockChanged
