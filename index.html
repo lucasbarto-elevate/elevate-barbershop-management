@@ -177,10 +177,21 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <div class="grid stats" id="cashStats"></div>
 <table><thead><tr><th>Hora</th><th>Barbeiro</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Pag. produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th><th></th></tr></thead><tbody id="entryList"></tbody></table></section>
 
-<section id="commissions" class="page"><h1>Comissões</h1><div class="sub">Fechamento por barbeiro</div>
-<div class="card"><div class="toolbar"><div><strong>Período</strong></div><div><input id="commFrom" type="date" style="width:150px" onchange="renderCommissions()"> <input id="commTo" type="date" style="width:150px" onchange="renderCommissions()"></div></div>
+<section id="commissions" class="page"><h1>Comissões</h1><div class="sub">Fechamento por barbeiro — escolha dia, semana, mês, ano ou um período personalizado.</div>
+<div class="card" style="margin:18px 0">
+  <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+    <button type="button" class="card cash-period-card" data-comm-period="today" onclick="setCommissionPeriod('today')" style="text-align:left"><div class="label">Hoje</div><div class="value" style="font-size:24px" id="commCardTodayValue">€0.00</div><div class="small" id="commCardTodayRange">Hoje</div></button>
+    <button type="button" class="card cash-period-card" data-comm-period="week" onclick="setCommissionPeriod('week')" style="text-align:left"><div class="label">Esta semana</div><div class="value" style="font-size:24px" id="commCardWeekValue">€0.00</div><div class="small" id="commCardWeekRange">Segunda a domingo</div></button>
+    <button type="button" class="card cash-period-card" data-comm-period="month" onclick="setCommissionPeriod('month')" style="text-align:left"><div class="label">Este mês</div><div class="value" style="font-size:24px" id="commCardMonthValue">€0.00</div><div class="small" id="commCardMonthRange">Do dia 1 ao último dia</div></button>
+    <button type="button" class="card cash-period-card" data-comm-period="year" onclick="setCommissionPeriod('year')" style="text-align:left"><div class="label">Este ano</div><div class="value" style="font-size:24px" id="commCardYearValue">€0.00</div><div class="small" id="commCardYearRange">Janeiro a dezembro</div></button>
+  </div>
+  <div class="card" style="margin-top:14px;background:#f8f8f8">
+    <div class="bar"><div><strong>Consultar uma data específica ou período</strong><div class="small">Para um único dia, use a mesma data nos dois campos.</div></div><button type="button" class="primary" onclick="setCommissionCustomRange()">Consultar</button></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"><div><label>Data inicial</label><input id="commFrom" type="date"></div><div><label>Data final</label><input id="commTo" type="date"></div></div>
+  </div>
+</div>
 <div class="grid stats" style="margin:12px 0"><div class="card"><div class="small">Total de comissões</div><div class="value" id="commTotalValue">€0.00</div><div class="small">Serviços + produtos · sem Elevate Barbershop</div></div></div>
-<table><thead><tr><th>Barbeiro</th><th>Lançamentos</th><th>Serviços</th><th>Produtos</th><th>Caixinhas</th><th>Comissão serviços</th><th>Comissão produtos</th><th>Total comissão</th></tr></thead><tbody id="commList"></tbody></table></div></section>
+<table><thead><tr><th>Barbeiro</th><th>Lançamentos</th><th>Serviços</th><th>Produtos</th><th>Caixinhas</th><th>Comissão serviços</th><th>Comissão produtos</th><th>Total comissão</th></tr></thead><tbody id="commList"></tbody></table></section>
 
 <section id="ipad" class="page ipad-page">
 <h1>Área dos Barbeiros</h1>
@@ -845,17 +856,51 @@ function renderCash(){
   }).join('');
   document.getElementById('entryList').innerHTML='<tr><td colspan="10" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s) · período '+from+' → '+to+'</td></tr>'+rows;
 }
+let commissionPeriod='today';
+function commissionDateRange(type){
+  const today=localDate(), p=today.split('-').map(Number), d=new Date(p[0],p[1]-1,p[2],12,0,0);
+  let from=today,to=today;
+  if(type==='week'){const day=d.getDay(),offset=day===0?-6:1-day;from=dateOnlyAdd(today,offset);to=dateOnlyAdd(from,6);}
+  else if(type==='month'){from=p[0]+'-'+String(p[1]).padStart(2,'0')+'-01';const last=new Date(p[0],p[1],0,12,0,0);to=dateOnly(last);}
+  else if(type==='year'){from=p[0]+'-01-01';to=p[0]+'-12-31';}
+  return {from,to};
+}
+function commissionTotalForRange(from,to){
+  return db.entries.filter(e=>(!from||e.date>=from)&&(!to||e.date<=to)).reduce((sum,e)=>{
+    const b=db.barbers.find(x=>x.id==e.barber);
+    return sum+(isShopBarber(b)?0:entryServiceTotal(e)*barberServiceCommissionRate(b)/100+entryProductCommission(e));
+  },0);
+}
+function updateCommissionPeriodCards(){
+  ['today','week','month','year'].forEach(type=>{
+    const r=commissionDateRange(type), v=commissionTotalForRange(r.from,r.to), cap=type.charAt(0).toUpperCase()+type.slice(1);
+    const el=document.getElementById('commCard'+cap+'Value'), rg=document.getElementById('commCard'+cap+'Range');
+    if(el)el.textContent=money(v); if(rg)rg.textContent=r.from===r.to?r.from:r.from+' → '+r.to;
+  });
+  document.querySelectorAll('[data-comm-period]').forEach(el=>el.classList.toggle('selected',el.dataset.commPeriod===commissionPeriod));
+}
+function setCommissionPeriod(type){
+  commissionPeriod=type; const r=commissionDateRange(type);
+  document.getElementById('commFrom').value=r.from; document.getElementById('commTo').value=r.to;
+  updateCommissionPeriodCards(); renderCommissions();
+}
+function setCommissionCustomRange(){
+  const from=document.getElementById('commFrom').value,to=document.getElementById('commTo').value;
+  if(!from||!to)return alert('Selecione a data inicial e a data final.');
+  if(from>to)return alert('A data inicial não pode ser maior que a data final.');
+  commissionPeriod='custom'; updateCommissionPeriodCards(); renderCommissions();
+}
 function renderCommissions(){
-  const from=document.getElementById('commFrom')?.value||'';
-  const to=document.getElementById('commTo')?.value||'';
+  updateCommissionPeriodCards();
+  const from=document.getElementById('commFrom')?.value||localDate();
+  const to=document.getElementById('commTo')?.value||from;
   const filtered=db.entries.filter(e=>(!from||e.date>=from)&&(!to||e.date<=to));
   let map=db.barbers.map(b=>{
     let es=filtered.filter(e=>e.barber==b.id),serviceRevenue=es.reduce((s,e)=>s+entryServiceTotal(e),0),productRevenue=es.reduce((s,e)=>s+entryProductTotal(e),0),tips=es.reduce((s,e)=>s+Number(e.tip||0),0),sc=serviceRevenue*barberServiceCommissionRate(b)/100,pc=isShopBarber(b)?0:es.reduce((s,e)=>s+entryProductCommission(e),0);
     return [b,es,serviceRevenue,productRevenue,tips,sc,pc];
   });
   const totalCommissions=map.reduce((sum,[b,es,sr,pr,t,sc,pc])=>sum+(isShopBarber(b)?0:sc+pc),0);
-  const totalEl=document.getElementById('commTotalValue');
-  if(totalEl) totalEl.textContent=money(totalCommissions);
+  const totalEl=document.getElementById('commTotalValue'); if(totalEl) totalEl.textContent=money(totalCommissions);
   commList.innerHTML=map.map(([b,es,sr,pr,t,sc,pc])=>`<tr><td>${b.name}</td><td>${es.length}</td><td>${money(sr)}</td><td>${money(pr)}</td><td>${money(t)}</td><td>${money(sc)} (${isShopBarber(b)?'0% — barbearia':b.commission+'%'})</td><td>${money(pc)}</td><td><b>${money(sc+pc)}</b></td></tr>`).join('');
 }
 function renderSettings(){setName.value=db.settings.name;setCurrency.value=db.settings.currency;setCommission.value=db.settings.commission;setOpen.value=db.settings.open;setClose.value=db.settings.close}
@@ -910,7 +955,7 @@ function openEntry(id){
     </div>
     <div id="editTotalPreview" class="card" style="margin-top:14px;background:#f8f8f8"></div>
     <div class="small" style="margin-top:10px">Você pode editar vários serviços e vários produtos no mesmo lançamento. O preço do catálogo é preenchido automaticamente quando você troca o item, mas o valor desta venda continua editável.</div>
-    <br><button class="primary" style="width:100%" onclick="saveEntry(${id||0})">Salvar alterações</button>`
+    <br><div class="actions" style="flex-direction:column"><button class="primary" style="width:100%" onclick="saveEntry(${id||0})">Salvar alterações</button>${id?`<button type="button" class="danger" style="width:100%;border-color:#b42318" onclick="closeModal();delEntry(${id})">Excluir lançamento inteiro</button>`:""}</div>`
   );
   renderEntryEditRows();
   updateEntryEditPreview();
@@ -923,7 +968,7 @@ function renderEntryEditRows(){
         <div><label>Serviço</label><select id="editServiceId${i}" onchange="editServiceRowChanged(${i})"><option value="">Nenhum</option>${db.services.map(s=>`<option value="${s.id}" ${String(s.id)===String(x.id)?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}</select></div>
         <div><label>Quantidade</label><input id="editServiceQty${i}" type="number" min="1" step="1" value="${Math.max(1,x.qty||1)}" oninput="updateEntryEditPreview()"></div>
         <div><label>Valor unitário (€)</label><input id="editServiceValue${i}" type="number" min="0" step=".01" value="${Number(x.unitPrice||0).toFixed(2)}" oninput="updateEntryEditPreview()"></div>
-        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditServiceRow(${i})">Remover</button></div>
+        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditServiceRow(${i})">Excluir serviço</button></div>
       </div>
     </div>`).join(''):'<div class="small">Nenhum serviço neste lançamento.</div>';
   if(pr) pr.innerHTML=entryEditState.products.length?entryEditState.products.map((x,i)=>`
@@ -932,7 +977,7 @@ function renderEntryEditRows(){
         <div><label>Produto</label><select id="editProductId${i}" onchange="editProductRowChanged(${i})"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(x.id)?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div>
         <div><label>Quantidade</label><input id="editProductQty${i}" type="number" min="1" step="1" value="${Math.max(1,x.qty||1)}" oninput="updateEntryEditPreview()"></div>
         <div><label>Valor unitário (€)</label><input id="editProductValue${i}" type="number" min="0" step=".01" value="${Number(x.unitPrice||0).toFixed(2)}" oninput="updateEntryEditPreview()"></div>
-        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditProductRow(${i})">Remover</button></div>
+        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditProductRow(${i})">Excluir produto</button></div>
       </div>
     </div>`).join(''):'<div class="small">Nenhum produto neste lançamento.</div>';
 }
@@ -1203,7 +1248,7 @@ function ipadSave(){
  renderIpad();
 }
 
-navInit();render();setDashboardPeriod('month');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
+navInit();render();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote();setInterval(()=>{if(navigator.onLine&&!document.getElementById('modal')?.classList.contains('open'))loadRemote()},15000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v5.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
