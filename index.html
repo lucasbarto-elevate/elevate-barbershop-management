@@ -363,9 +363,15 @@ let versionCheckInFlight=false;
 let remoteLoadInFlight=false;
 let backendOnline=null;
 async function syncRemoteNow(){
- if(syncInFlight) return false;
+ if(syncInFlight){
+   // A mutation may have been queued while another sync was in progress.
+   // Mark the need for a follow-up pass instead of silently dropping the trigger.
+   syncRetryTimer='queued';
+   return false;
+ }
  if(!pendingSync.length && !pendingDeletes.length && !catalogDirty){ updateConnectionStatus(); return true; }
  syncInFlight=true;
+ syncRetryTimer=null;
  try{
    const payload=pendingSync.map(id=>db.entries.find(e=>String(e.id)===String(id))).filter(Boolean);
    const controller=new AbortController();
@@ -409,7 +415,20 @@ async function syncRemoteNow(){
      syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;syncRemoteNow();},3000);
    }
    return false;
- }finally{ syncInFlight=false; }
+ }finally{
+   syncInFlight=false;
+   const hasPending=pendingSync.length||pendingDeletes.length||catalogDirty;
+   const queued=syncRetryTimer==='queued';
+   if(hasPending && (queued || backendOnline!==false)){
+     syncRetryTimer=null;
+     queueMicrotask(()=>syncRemoteNow());
+   } else if(syncRetryTimer==='queued') {
+     syncRetryTimer=null;
+     if(!syncRetryTimer){
+       syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;syncRemoteNow();},3000);
+     }
+   }
+ }
 }
 function save(options={}){
  const syncCatalog=options.syncCatalog!==false;
@@ -1384,7 +1403,16 @@ async function ipadSave(){
  renderIpad();
 }
 
-navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open')&&!syncInFlight&&!pendingSync.length&&!pendingDeletes.length){loadRemote(document.body.classList.contains('ipad-mode'));}},1000);
+navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();
+// Drain mutations restored from localStorage as soon as the app starts.
+if(pendingSync.length||pendingDeletes.length||catalogDirty) syncRemoteNow();
+loadRemote(true);
+setInterval(()=>{
+  if(!document.getElementById('modal')?.classList.contains('open')){
+    if(pendingSync.length||pendingDeletes.length||catalogDirty) syncRemoteNow();
+    else if(!syncInFlight) loadRemote(document.body.classList.contains('ipad-mode'));
+  }
+},1000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v6.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
