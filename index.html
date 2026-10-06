@@ -822,12 +822,23 @@ function cashDateRange(type){
 let cashPeriod='today';
 function cashPeriodStats(from,to){
   const es=db.entries.filter(e=>(!from||e.date>=from)&&(!to||e.date<=to));
+  const cash=es.reduce((s,e)=>s+paymentTotal(e,'Cash'),0);
+  const revolut=es.reduce((s,e)=>s+paymentTotal(e,'Revolut'),0);
+  const sumup=es.reduce((s,e)=>s+paymentTotal(e,'SumUp'),0);
+  const tipCash=es.reduce((s,e)=>s+(e.tipPayment==='Cash'?Number(e.tip||0):0),0);
+  const tipRevolut=es.reduce((s,e)=>s+(e.tipPayment==='Revolut'?Number(e.tip||0):0),0);
+  const tipSumup=es.reduce((s,e)=>s+(e.tipPayment==='SumUp'?Number(e.tip||0):0),0);
   return {
     es,
     revenue:es.reduce((s,e)=>s+entryTotal(e),0),
     services:es.reduce((s,e)=>s+entryServiceTotal(e),0),
     products:es.reduce((s,e)=>s+entryProductTotal(e),0),
-    tips:es.reduce((s,e)=>s+Number(e.tip||0),0)
+    tips:es.reduce((s,e)=>s+Number(e.tip||0),0),
+    cash:cash+tipCash,
+    revolut:revolut+tipRevolut,
+    sumup:sumup+tipSumup,
+    cashServices:es.reduce((s,e)=>s+(paymentTotal(e,'Cash')>0?entryServiceTotal(e):0),0),
+    cashProducts:es.reduce((s,e)=>s+(paymentTotal(e,'Cash')>0?entryProductTotal(e):0),0)
   };
 }
 function updateCashPeriodCards(){
@@ -838,7 +849,7 @@ function updateCashPeriodCards(){
     const p=cashPeriodStats(r.from,r.to);
     const v=document.getElementById('cashCard'+ids[type]+'Value');
     const range=document.getElementById('cashCard'+ids[type]+'Range');
-    if(v)v.textContent=money(p.revenue);
+    if(v)v.textContent=money(p.cash);
     if(range)range.textContent=r.from===r.to?r.from:(r.from+' → '+r.to);
   });
   document.querySelectorAll('.cash-period-card').forEach(el=>{
