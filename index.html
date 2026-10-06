@@ -1384,7 +1384,7 @@ async function ipadSave(){
  renderIpad();
 }
 
-navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open')&&!syncInFlight&&!pendingSync.length&&!pendingDeletes.length)loadRemote()},1000);
+navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open')&&!syncInFlight&&!pendingSync.length&&!pendingDeletes.length){loadRemote(document.body.classList.contains('ipad-mode'));}},1000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v6.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
