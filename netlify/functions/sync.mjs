@@ -1,69 +1,36 @@
 import { getStore } from '@netlify/blobs';
 import { seed } from './_seed.mjs';
 
-const store = getStore({ name:'elevate-db', consistency:'strong' });
-const CATALOG_KEY = 'catalog';
-const LEGACY_KEY = 'database';
-const ENTRY_PREFIX = 'entries/';
-const VERSION_KEY = 'sync-version';
-
-function cloneSeed(){ return structuredClone(seed); }
-
-async function ensureMigrated(){
-  let catalog = await store.get(CATALOG_KEY, { type:'json' });
-  const legacy = await store.get(LEGACY_KEY, { type:'json' });
-  const source = legacy || cloneSeed();
-
-  if(!catalog){
-    catalog = {
-      settings: source.settings,
-      barbers: source.barbers || [],
-      services: source.services || [],
-      products: source.products || []
-    };
-    await store.setJSON(CATALOG_KEY,catalog);
-  }else{
-    let changed=false;
-    if(!catalog.settings){catalog.settings=source.settings;changed=true;}
-    if(!Array.isArray(catalog.barbers)||!catalog.barbers.length){catalog.barbers=source.barbers||[];changed=true;}
-    if(!Array.isArray(catalog.services)||!catalog.services.length){catalog.services=source.services||[];changed=true;}
-    if(!Array.isArray(catalog.products)||!catalog.products.length){catalog.products=source.products||[];changed=true;}
-    if(changed) await store.setJSON(CATALOG_KEY,catalog);
-  }
-
-  // Do not recreate historical/seed launches automatically. Launches are transactional data.
-  // If legacy data exists, it is migrated explicitly by the data endpoint; an empty database stays empty.
+const store=getStore({name:'elevate-db',consistency:'strong'});
+const CATALOG_KEY='catalog', LEGACY_KEY='database', ENTRY_PREFIX='entries/', VERSION_KEY='sync-version';
+function cloneSeed(){return structuredClone(seed)}
+function validCatalog(c){return !!(c?.settings&&c?.barbers?.length&&c?.services?.length&&c?.products?.length)}
+async function getCatalog(){
+  let catalog=await store.get(CATALOG_KEY,{type:'json',consistency:'strong'});
+  if(validCatalog(catalog)) return catalog;
+  const legacy=await store.get(LEGACY_KEY,{type:'json',consistency:'strong'});
+  const source=legacy||catalog||cloneSeed(), fallback=cloneSeed();
+  catalog={
+    settings:source.settings||fallback.settings,
+    barbers:Array.isArray(source.barbers)&&source.barbers.length?source.barbers:fallback.barbers,
+    services:Array.isArray(source.services)&&source.services.length?source.services:fallback.services,
+    products:Array.isArray(source.products)&&source.products.length?source.products:fallback.products
+  };
+  await store.setJSON(CATALOG_KEY,catalog);
   return catalog;
 }
-
-function normalizeEntry(e){
-  return {
-    ...e,
-    id:String(e.id),
-    clients:Number(e.clients||0),
-    tip:Number(e.tip||0),
-    total:Number(e.total||0),
-    serviceItems:Array.isArray(e.serviceItems)?e.serviceItems:[],
-    productItems:Array.isArray(e.productItems)?e.productItems:[]
-  };
-}
-
+function normalizeEntry(e){return {...e,id:String(e.id),clients:Number(e.clients||0),tip:Number(e.tip||0),total:Number(e.total||0),serviceItems:Array.isArray(e.serviceItems)?e.serviceItems:[],productItems:Array.isArray(e.productItems)?e.productItems:[]}}
 function productQty(entry){
   const out=new Map();
   for(const item of (entry?.productItems||[])){
-    const id=String(item.id);
-    const qty=Number(item.qty||1);
-    if(id && qty>0) out.set(id,(out.get(id)||0)+qty);
+    const id=String(item.id), qty=Number(item.qty||1);
+    if(id&&qty>0) out.set(id,(out.get(id)||0)+qty);
   }
-  // Legacy product-only entries
-  if(!out.size && entry?.productId){
-    out.set(String(entry.productId),1);
-  }
+  if(!out.size&&entry?.productId) out.set(String(entry.productId),1);
   return out;
 }
-
-function applyStockDelta(catalog, delta){
-  for(const [id,change] of delta.entries()){
+function applyStockDelta(catalog,delta){
+  for(const [id,change] of delta){
     const p=catalog.products.find(x=>String(x.id)===String(id));
     if(!p) continue;
     const next=Number(p.stock||0)+Number(change||0);
@@ -71,120 +38,69 @@ function applyStockDelta(catalog, delta){
     p.stock=next;
   }
 }
-
 function mergeCatalogEdits(current,incoming,preserveStock){
   if(!incoming) return current;
-  const merged={
-    settings: incoming.settings || current.settings,
-    barbers: Array.isArray(incoming.barbers)?incoming.barbers:current.barbers,
-    services: Array.isArray(incoming.services)?incoming.services:current.services,
-    products: current.products
-  };
-  if(Array.isArray(incoming.products)){
-    merged.products=incoming.products.map(ip=>{
-      const old=current.products.find(p=>String(p.id)===String(ip.id));
-      if(!old) return ip;
-      return preserveStock ? {...ip,stock:old.stock} : ip;
-    });
-  }
+  const merged={settings:incoming.settings||current.settings,barbers:Array.isArray(incoming.barbers)?incoming.barbers:current.barbers,services:Array.isArray(incoming.services)?incoming.services:current.services,products:current.products};
+  if(Array.isArray(incoming.products)) merged.products=incoming.products.map(ip=>{
+    const old=current.products.find(p=>String(p.id)===String(ip.id));
+    return old&&preserveStock?{...ip,stock:old.stock}:ip;
+  });
   return merged;
 }
-
-async function blobJson(key){
-  return await store.get(key,{type:'json',consistency:'strong'});
+async function bumpVersion(){
+  const state={version:Date.now(),updatedAt:new Date().toISOString()};
+  await store.setJSON(VERSION_KEY,state);
+  return state;
 }
 
-async function readAllEntries(){
-  const { blobs }=await store.list({prefix:ENTRY_PREFIX});
-  if(!blobs?.length) return [];
-  const rows=await Promise.all(blobs.map(b=>store.get(b.key,{type:'json'})));
-  return rows.filter(Boolean);
-}
-
-export default async (req)=>{
-  if(req.method!=='POST') return Response.json({error:'Method not allowed'},{status:405});
+export default async req=>{
+  if(req.method!=='POST') return Response.json({ok:false,error:'Method not allowed'},{status:405});
   try{
     const body=await req.json();
-    let catalog=await ensureMigrated();
+    let catalog=await getCatalog();
     const incoming=Array.isArray(body.entries)?body.entries.map(normalizeEntry):[];
     const deletedIds=Array.isArray(body.deletedIds)?body.deletedIds.map(String):[];
     let stockChanged=false;
 
-    // Entries are individually idempotent. A retry of the same new launch
-    // cannot create a second stock movement.
     for(const e of incoming){
-      const key=`${ENTRY_PREFIX}${e.id}`;
-      const existing=await blobJson(key);
+      const key=ENTRY_PREFIX+e.id;
+      const existing=await store.get(key,{type:'json',consistency:'strong'});
       if(existing===null){
-        const delta=new Map();
-        for(const [id,qty] of productQty(e)) delta.set(id,-qty);
+        const delta=new Map(); for(const [id,qty] of productQty(e)) delta.set(id,-qty);
         applyStockDelta(catalog,delta);
         const result=await store.setJSON(key,e,{onlyIfNew:true});
-        if(result.modified){
-          stockChanged=stockChanged || delta.size>0;
-        }else{
-          // Another request created it between our read and write.
-          const winner=await store.get(key,{type:'json',consistency:'strong'});
-          if(winner===null) throw new Error('Falha ao gravar lançamento');
-        }
+        if(result.modified) stockChanged=stockChanged||delta.size>0;
+        else if(await store.get(key,{type:'json',consistency:'strong'})===null) throw new Error('Falha ao gravar lançamento');
       }else{
-        // Admin edit: adjust stock only by the quantity difference.
-        const oldQ=productQty(existing), newQ=productQty(e), delta=new Map();
-        const ids=new Set([...oldQ.keys(),...newQ.keys()]);
-        for(const id of ids){
-          const oldQty=oldQ.get(id)||0, newQty=newQ.get(id)||0;
-          if(oldQty!==newQty) delta.set(id,oldQty-newQty);
-        }
+        const oldQ=productQty(existing),newQ=productQty(e),delta=new Map(),ids=new Set([...oldQ.keys(),...newQ.keys()]);
+        for(const id of ids){const d=(oldQ.get(id)||0)-(newQ.get(id)||0);if(d)delta.set(id,d)}
         applyStockDelta(catalog,delta);
         const meta=await store.getMetadata(key,{consistency:'strong'});
-        if(!meta?.etag) throw new Error('Lançamento existente sem ETag; recarregue o banco e tente novamente.');
+        if(!meta?.etag) throw new Error('Lançamento existente sem ETag; recarregue e tente novamente.');
         const result=await store.setJSON(key,e,{onlyIfMatch:meta.etag});
         if(!result.modified) throw new Error('Lançamento foi alterado por outro dispositivo. Recarregue e tente novamente.');
-        stockChanged=stockChanged || delta.size>0;
+        stockChanged=stockChanged||delta.size>0;
       }
     }
 
-    // Admin deletion: restore the products that belonged to the deleted launch.
     for(const id of deletedIds){
-      const key=`${ENTRY_PREFIX}${id}`;
+      const key=ENTRY_PREFIX+id;
       const existing=await store.get(key,{type:'json',consistency:'strong'});
       if(existing){
-        const delta=new Map();
-        for(const [pid,qty] of productQty(existing)) delta.set(pid,qty);
+        const delta=new Map();for(const [pid,qty] of productQty(existing))delta.set(pid,qty);
         applyStockDelta(catalog,delta);
         await store.delete(key);
-        stockChanged=stockChanged || delta.size>0;
+        stockChanged=stockChanged||delta.size>0;
       }
     }
 
-    // Catalog changes are a separate operation. When a sale is in the same
-    // request, server stock remains authoritative and is never replaced by
-    // an old iPad stock value.
-    if(body.catalog){
-      catalog=mergeCatalogEdits(catalog,body.catalog, incoming.length>0 || deletedIds.length>0 || stockChanged);
-    }
-
-    if(body.catalog || stockChanged){
-      await store.setJSON(CATALOG_KEY,catalog);
-    }
-
-    let version=await store.get(VERSION_KEY,{type:'json'});
-    if(body.catalog || stockChanged || incoming.length || deletedIds.length){
-      version={version:Date.now(),updatedAt:new Date().toISOString()};
-      await store.setJSON(VERSION_KEY,version);
-    }
-    return Response.json({
-      ok:true,
-      version:version?.version||0,
-      catalog,
-      entries:incoming,
-      deletedIds,
-      received:incoming.length,
-      deleted:deletedIds.length,
-      stockChanged
-    },{headers:{'Cache-Control':'no-store'}});
+    if(body.catalog) catalog=mergeCatalogEdits(catalog,body.catalog,incoming.length>0||deletedIds.length>0||stockChanged);
+    if(body.catalog||stockChanged) await store.setJSON(CATALOG_KEY,catalog);
+    const changed=!!(body.catalog||stockChanged||incoming.length||deletedIds.length);
+    const version=changed?await bumpVersion():await store.get(VERSION_KEY,{type:'json',consistency:'strong'});
+    return Response.json({ok:true,version:version?.version||0,catalog,entries:incoming,deletedIds,received:incoming.length,deleted:deletedIds.length,stockChanged},{headers:{'Cache-Control':'no-store'}});
   }catch(err){
-    console.error('[sync] failed', err);
+    console.error('[sync] failed',err);
     const message=String(err?.message||err);
     const status=/Estoque insuficiente|alterado por outro dispositivo|ETag|Falha ao gravar/.test(message)?409:503;
     return Response.json({ok:false,error:message,retryable:status===503},{status,headers:{'Cache-Control':'no-store'}});
