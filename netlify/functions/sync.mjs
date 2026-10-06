@@ -48,9 +48,18 @@ function mergeCatalogEdits(current,incoming,preserveStock){
   return merged;
 }
 async function bumpVersion(){
-  const state={version:Date.now(),updatedAt:new Date().toISOString()};
-  await store.setJSON(VERSION_KEY,state);
-  return state;
+  // Compare-and-swap keeps the version monotonic even when mutations finish together.
+  for(let attempt=0;attempt<32;attempt++){
+    const current=await store.get(VERSION_KEY,{type:'json',consistency:'strong'});
+    const metadata=await store.getMetadata(VERSION_KEY,{consistency:'strong'});
+    const state={version:Math.max(Date.now(),Number(current?.version||0)+1),updatedAt:new Date().toISOString()};
+    const result=!current||!metadata?.etag
+      ?await store.setJSON(VERSION_KEY,state,{onlyIfNew:true})
+      :await store.setJSON(VERSION_KEY,state,{onlyIfMatch:metadata.etag});
+    if(result?.modified)return state;
+    await new Promise(resolve=>setTimeout(resolve,Math.min(10*(attempt+1),100)));
+  }
+  throw new Error('Não foi possível incrementar a versão remota após várias tentativas.');
 }
 
 export default async req=>{

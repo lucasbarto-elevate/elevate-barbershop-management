@@ -358,77 +358,57 @@ function barberServiceCommissionRate(b){return isShopBarber(b)?0:Number(b?.commi
 let remoteLoaded=false;
 let syncInFlight=false;
 let syncRetryTimer=null;
+let syncDrainPromise=null;
 let remoteVersion=null;
 let versionCheckInFlight=false;
 let remoteLoadInFlight=false;
+let remoteLoadPromise=null;
 let backendOnline=null;
-async function syncRemoteNow(){
- if(syncInFlight){
-   // A mutation may have been queued while another sync was in progress.
-   // Mark the need for a follow-up pass instead of silently dropping the trigger.
-   syncRetryTimer='queued';
-   return false;
- }
- if(!pendingSync.length && !pendingDeletes.length && !catalogDirty){ updateConnectionStatus(); return true; }
- syncInFlight=true;
- syncRetryTimer=null;
+function hasPendingSyncWork(){return pendingSync.length>0||pendingDeletes.length>0||catalogDirty;}
+function scheduleSyncRetry(){if(syncRetryTimer)return;syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;syncRemoteNow();},3000);}
+async function runSyncDrain(){
+ let failed=false;syncInFlight=true;
  try{
-   const payload=pendingSync.map(id=>db.entries.find(e=>String(e.id)===String(id))).filter(Boolean);
-   const controller=new AbortController();
-   const timeout=setTimeout(()=>controller.abort(),8000);
-   const body={
-     entries:payload,
-     deletedIds:pendingDeletes.map(String),
-     catalog:catalogDirty?{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}:null
-   };
-   const r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-   clearTimeout(timeout);
-   if(!r.ok) throw new Error('sync');
-   const out=await r.json();
-   if(!out.ok||!out.catalog) throw new Error('sync-response');
-     backendOnline=true;
-   db.settings=out.catalog.settings;
-   db.barbers=out.catalog.barbers||db.barbers;
-   db.services=out.catalog.services||db.services;
-   db.products=out.catalog.products||db.products;
-   const accepted=Array.isArray(out.entries)?out.entries:[];
-   for(const e of accepted){
-     const i=db.entries.findIndex(x=>String(x.id)===String(e.id));
-     if(i>=0) db.entries[i]=e; else db.entries.push(e);
-   }
-   for(const id of (out.deletedIds||[])) db.entries=db.entries.filter(e=>String(e.id)!==String(id));
-   remoteVersion=out.version||remoteVersion;
-   pendingSync=pendingSync.filter(id=>!accepted.some(e=>String(e.id)===String(id)));
-   pendingDeletes=pendingDeletes.filter(id=>!(out.deletedIds||[]).map(String).includes(String(id)));
-   catalogDirty=false;
-   localStorage.setItem(key,JSON.stringify(db));
-   localStorage.setItem(syncKey,JSON.stringify(pendingSync));
-   localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
-   localStorage.removeItem(catalogSyncKey);
-   backendOnline=true;
-   updateConnectionStatus(); render();
-   return true;
- }catch(e){
-   backendOnline=false;
-   updateConnectionStatus();
-   if(!syncRetryTimer){
-     syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;syncRemoteNow();},3000);
-   }
-   return false;
- }finally{
-   syncInFlight=false;
-   const hasPending=pendingSync.length||pendingDeletes.length||catalogDirty;
-   const queued=syncRetryTimer==='queued';
-   if(hasPending && (queued || backendOnline!==false)){
-     syncRetryTimer=null;
-     queueMicrotask(()=>syncRemoteNow());
-   } else if(syncRetryTimer==='queued') {
-     syncRetryTimer=null;
-     if(!syncRetryTimer){
-       syncRetryTimer=setTimeout(()=>{syncRetryTimer=null;syncRemoteNow();},3000);
-     }
-   }
- }
+  while(hasPendingSyncWork()){
+   const sentSyncIds=[...pendingSync],sentDeleteIds=[...pendingDeletes].map(String),sentCatalog=catalogDirty;
+   const payload=sentSyncIds.map(id=>db.entries.find(e=>String(e.id)===String(id))).filter(Boolean).map(e=>structuredClone(e));
+   const sentCatalogData=sentCatalog?JSON.stringify({settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}):null;
+   const body={entries:payload,deletedIds:sentDeleteIds,catalog:sentCatalog?{settings:db.settings,barbers:db.barbers,services:db.services,products:db.products}:null};
+   console.info('[Elevate sync] sync start',{entries:payload.length,deletes:sentDeleteIds.length,catalog:sentCatalog});
+   if(sentDeleteIds.length)console.info('[Elevate sync] delete sent',sentDeleteIds);
+   try{
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);let r;
+    try{r=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal,cache:'no-store'});}finally{clearTimeout(timeout);}
+    const out=await r.json().catch(()=>null);
+    if(!r.ok||!out?.ok||!out.catalog)throw new Error(out?.error||'sync-http-'+r.status);
+    const accepted=Array.isArray(out.entries)?out.entries:[],confirmedDeletes=Array.isArray(out.deletedIds)?out.deletedIds.map(String):[];
+    const catalogChangedDuringSync=sentCatalog&&JSON.stringify({settings:db.settings,barbers:db.barbers,services:db.services,products:db.products})!==sentCatalogData;
+    pendingSync=pendingSync.filter(id=>{
+     const sentId=sentSyncIds.find(sent=>String(sent)===String(id));
+     if(sentId===undefined)return true;
+     const sent=payload.find(e=>String(e.id)===String(id)),current=db.entries.find(e=>String(e.id)===String(id));
+     return !accepted.some(e=>String(e.id)===String(id))||!sent||!current||JSON.stringify(sent)!==JSON.stringify(current);
+    });
+    pendingDeletes=pendingDeletes.filter(id=>!sentDeleteIds.includes(String(id))||!confirmedDeletes.includes(String(id)));
+    if(sentCatalog&&!catalogChangedDuringSync)catalogDirty=false;
+    if(!catalogChangedDuringSync){db.settings=out.catalog.settings;db.barbers=out.catalog.barbers||db.barbers;db.services=out.catalog.services||db.services;db.products=out.catalog.products||db.products;}
+    for(const e of accepted){const i=db.entries.findIndex(x=>String(x.id)===String(e.id)),sent=payload.find(x=>String(x.id)===String(e.id));if(i>=0){if(sent&&JSON.stringify(db.entries[i])!==JSON.stringify(sent)){if(!pendingSync.map(String).includes(String(e.id)))pendingSync.push(e.id);continue;}db.entries[i]=e;}else if(!pendingDeletes.map(String).includes(String(e.id)))db.entries.push(e);}
+    for(const id of confirmedDeletes)db.entries=db.entries.filter(e=>String(e.id)!==id);
+    remoteVersion=out.version||remoteVersion;
+    localStorage.setItem(key,JSON.stringify(db));localStorage.setItem(syncKey,JSON.stringify(pendingSync));localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
+    if(catalogDirty)localStorage.setItem(catalogSyncKey,'1');else localStorage.removeItem(catalogSyncKey);
+    backendOnline=true;console.info('[Elevate sync] delete confirmed',confirmedDeletes);if(!hasPendingSyncWork())console.info('[Elevate sync] queue drained');updateConnectionStatus();render();
+   }catch(e){failed=true;backendOnline=false;console.error('[Elevate sync] sync failed; queue retained',e);updateConnectionStatus();break;}
+  }
+ }finally{syncInFlight=false;}
+ if(failed){scheduleSyncRetry();return false;}return !hasPendingSyncWork();
+}
+function syncRemoteNow(){
+ if(syncDrainPromise){console.info('[Elevate sync] sync busy; follow-up drain guaranteed');return syncDrainPromise;}
+ if(!hasPendingSyncWork()){updateConnectionStatus();return Promise.resolve(true);}
+ if(syncRetryTimer){clearTimeout(syncRetryTimer);syncRetryTimer=null;}
+ syncDrainPromise=runSyncDrain().finally(()=>{syncDrainPromise=null;if(hasPendingSyncWork()&&!syncRetryTimer)queueMicrotask(()=>syncRemoteNow());});
+ return syncDrainPromise;
 }
 function save(options={}){
  const syncCatalog=options.syncCatalog!==false;
@@ -448,18 +428,22 @@ function queueSync(entry){
  syncRemoteNow();
 }
 function queueDelete(id){
- if(id!=null && !pendingDeletes.map(String).includes(String(id))) pendingDeletes.push(id);
+ if(id==null)return Promise.resolve(false);
+ const normalized=String(id);
+ if(!pendingDeletes.map(String).includes(normalized)) pendingDeletes.push(normalized);
+ pendingSync=pendingSync.filter(item=>String(item)!==normalized);
+ localStorage.setItem(syncKey,JSON.stringify(pendingSync));
  localStorage.setItem(deleteSyncKey,JSON.stringify(pendingDeletes));
+ console.info('[Elevate sync] pending delete queued',normalized);
  updateConnectionStatus();
- syncRemoteNow();
+ return syncRemoteNow();
 }
 async function syncPending(){await syncRemoteNow();}
 async function loadRemote(force=false){
- if(remoteLoadInFlight) return;
- const staleCatalogOnly=catalogDirty && !pendingSync.length && !pendingDeletes.length && !(db.entries||[]).length;
- if(syncInFlight || pendingSync.length || pendingDeletes.length || (catalogDirty && !staleCatalogOnly)){updateConnectionStatus();return;}
+ if(remoteLoadPromise)return remoteLoadPromise;
+ if(hasPendingSyncWork()||syncInFlight){console.info('[Elevate sync] remote load deferred; draining queue');await syncRemoteNow();if(hasPendingSyncWork()||syncInFlight){updateConnectionStatus();return false;}}
  remoteLoadInFlight=true;
- try{
+ remoteLoadPromise=(async()=>{try{
    const vr=await fetch('/api/version',{cache:'no-store'});
    if(!vr.ok) throw new Error('version-http-'+vr.status);
    const vs=await vr.json();
@@ -476,30 +460,25 @@ async function loadRemote(force=false){
      && Array.isArray(remote.products) && remote.products.length>0
      && Array.isArray(remote.entries);
    if(!validCatalog) throw new Error('invalid-remote-database');
+   if(hasPendingSyncWork()||syncInFlight){console.info('[Elevate sync] remote snapshot discarded; local mutation queued during load');return false;}
    db=remote;
    remoteVersion=remote.version||vs.version||null;
    // Replace the local snapshot on every confirmed remote version change,
    // including deletions made from another device.
-   pendingSync=[];
-   pendingDeletes=[];
-   catalogDirty=false;
-   localStorage.removeItem(syncKey);
-   localStorage.removeItem(deleteSyncKey);
-   localStorage.removeItem(catalogSyncKey);
    db.products=(db.products||[]).map(p=>({...p,commission:Number(p.commission||0)}));
    db.barbers=(db.barbers||[]).map(b=>b.name==='Elevate Barbershop'?{...b,commission:0}:b);
    remoteLoaded=true;
    backendOnline=true;
    localStorage.setItem(key,JSON.stringify(db));
    if(staleCatalogOnly){catalogDirty=false;localStorage.removeItem(catalogSyncKey);}
-   render();updateConnectionStatus();
+   console.info('[Elevate sync] remote data loaded',{version:remoteVersion,entries:db.entries.length});
+   render();updateConnectionStatus();return true;
  }catch(e){
    backendOnline=false;
    console.error('[Elevate] Falha ao sincronizar banco remoto:',e);
-   updateConnectionStatus();
- }finally{
-   remoteLoadInFlight=false;
- }
+   updateConnectionStatus();return false;
+ }finally{remoteLoadInFlight=false;remoteLoadPromise=null;}})();
+ return remoteLoadPromise;
 }
 function updateConnectionStatus(){
  const el=document.getElementById('syncStatus');if(!el)return;
@@ -1404,15 +1383,10 @@ async function ipadSave(){
 }
 
 navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();
-// Drain mutations restored from localStorage as soon as the app starts.
-if(pendingSync.length||pendingDeletes.length||catalogDirty) syncRemoteNow();
+if(hasPendingSyncWork())syncRemoteNow();
 loadRemote(true);
-setInterval(()=>{
-  if(!document.getElementById('modal')?.classList.contains('open')){
-    if(pendingSync.length||pendingDeletes.length||catalogDirty) syncRemoteNow();
-    else if(!syncInFlight) loadRemote(document.body.classList.contains('ipad-mode'));
-  }
-},1000);
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v6.js',{updateViaCache:'none'}).catch(()=>{});}
+setInterval(()=>{if(document.getElementById('modal')?.classList.contains('open'))return;if(hasPendingSyncWork())syncRemoteNow();else loadRemote(document.body.classList.contains('ipad-mode'));},1000);
+if('serviceWorker' in navigator){let hadController=!!navigator.serviceWorker.controller;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(hadController)location.reload();else{hadController=true;location.reload();}});navigator.serviceWorker.register('./sw-v7.js',{updateViaCache:'none'}).catch(e=>console.error('[Elevate SW] registration failed',e));}
 </script>
+<script src="/sync-runtime-v1.js?v=2"></script>
 </body></html>
