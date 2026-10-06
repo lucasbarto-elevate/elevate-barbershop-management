@@ -437,9 +437,9 @@ function queueDelete(id){
 async function syncPending(){await syncRemoteNow();}
 async function loadRemote(force=false){
  if(remoteLoadInFlight) return;
- remoteLoadInFlight=true;
  const staleCatalogOnly=catalogDirty && !pendingSync.length && !pendingDeletes.length && !(db.entries||[]).length;
  if(syncInFlight || pendingSync.length || pendingDeletes.length || (catalogDirty && !staleCatalogOnly)){updateConnectionStatus();return;}
+ remoteLoadInFlight=true;
  try{
    const vr=await fetch('/api/version',{cache:'no-store'});
    if(!vr.ok) throw new Error('version-http-'+vr.status);
