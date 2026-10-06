@@ -459,6 +459,14 @@ async function loadRemote(force=false){
    if(!validCatalog) throw new Error('invalid-remote-database');
    db=remote;
    remoteVersion=remote.version||vs.version||null;
+   // Replace the local snapshot on every confirmed remote version change,
+   // including deletions made from another device.
+   pendingSync=[];
+   pendingDeletes=[];
+   catalogDirty=false;
+   localStorage.removeItem(syncKey);
+   localStorage.removeItem(deleteSyncKey);
+   localStorage.removeItem(catalogSyncKey);
    db.products=(db.products||[]).map(p=>({...p,commission:Number(p.commission||0)}));
    db.barbers=(db.barbers||[]).map(b=>b.name==='Elevate Barbershop'?{...b,commission:0}:b);
    remoteLoaded=true;
@@ -1376,7 +1384,7 @@ async function ipadSave(){
  renderIpad();
 }
 
-navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open'))loadRemote()},1500);
+navInit();render();applyHostMode();setDashboardPeriod('month');setCommissionPeriod('today');updateConnectionStatus();loadRemote(true);setInterval(()=>{if(!document.getElementById('modal')?.classList.contains('open')&&!syncInFlight&&!pendingSync.length&&!pendingDeletes.length)loadRemote()},1000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw-v6.js',{updateViaCache:'none'}).catch(()=>{});}
 </script>
 </body></html>
