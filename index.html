@@ -731,7 +731,7 @@ function renderDashboard(){
     ['Comissões',money(totalComm)],['Lançamentos',entries.length]
   ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="small">${start} → ${end}</div></div>`).join('');
 
-  dashboardPayments.innerHTML=['Cash','Revolut','SumUp'].map(p=>`<div class="card"><div class="label">${p}</div><div class="value">${money(entries.reduce((s,e)=>s+paymentTotal(e,p),0))}</div><div class="small">Serviços + produtos</div></div>`).join('');
+  dashboardPayments.innerHTML=['Cash','Revolut','SumUp'].map(p=>`<div class="card"><div class="label">${p}</div><div class="value">${money(entries.reduce((s,e)=>s+paymentTotal(e,p)+( (e.tipPayment||'Cash')===p ? Number(e.tip||0) : 0 ),0))}</div><div class="small">Serviços + produtos + caixinhas</div></div>`).join('');
 
   barberCards.innerHTML=db.barbers.map(b=>{
     const es=entries.filter(e=>e.barber==b.id);
@@ -762,7 +762,7 @@ function renderDashboard(){
     <div class="grid cards">
       <div class="card"><div class="bar"><strong>Resumo</strong><span class="badge">Ticket médio ${money(ticket)}</span></div>
         <p class="small">Serviços ${money(services)} · Produtos ${money(products)} · Caixinhas ${money(tips)}</p>
-        <p class="small">Cash ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Cash'),0))} · Revolut ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Revolut'),0))} · SumUp ${money(entries.reduce((s,e)=>s+paymentTotal(e,'SumUp'),0))}</p>
+        <p class="small">Cash ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Cash')+((e.tipPayment||'Cash')==='Cash'?Number(e.tip||0):0),0))} · Revolut ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Revolut')+((e.tipPayment||'Cash')==='Revolut'?Number(e.tip||0):0),0))} · SumUp ${money(entries.reduce((s,e)=>s+paymentTotal(e,'SumUp')+((e.tipPayment||'Cash')==='SumUp'?Number(e.tip||0):0),0))}</p>
       </div>
       <div class="card"><strong>Top serviços</strong>${topServices.length?'<ol style="padding-left:20px">'+topServices.map(x=>`<li>${x.name} — ${x.qty} un. · ${money(x.value)}</li>`).join('')+'</ol>':'<p class="small">Nenhum serviço no período.</p>'}</div>
       <div class="card"><strong>Top produtos</strong>${topProducts.length?'<ol style="padding-left:20px">'+topProducts.map(x=>`<li>${x.name} — ${x.qty} un. · ${money(x.value)}</li>`).join('')+'</ol>':'<p class="small">Nenhum produto no período.</p>'}</div>
@@ -825,9 +825,9 @@ function cashPeriodStats(from,to){
   const cash=es.reduce((s,e)=>s+paymentTotal(e,'Cash'),0);
   const revolut=es.reduce((s,e)=>s+paymentTotal(e,'Revolut'),0);
   const sumup=es.reduce((s,e)=>s+paymentTotal(e,'SumUp'),0);
-  const tipCash=es.reduce((s,e)=>s+(e.tipPayment==='Cash'?Number(e.tip||0):0),0);
-  const tipRevolut=es.reduce((s,e)=>s+(e.tipPayment==='Revolut'?Number(e.tip||0):0),0);
-  const tipSumup=es.reduce((s,e)=>s+(e.tipPayment==='SumUp'?Number(e.tip||0):0),0);
+  const tipCash=es.reduce((s,e)=>s+((e.tipPayment||'Cash')==='Cash'?Number(e.tip||0):0),0);
+  const tipRevolut=es.reduce((s,e)=>s+((e.tipPayment||'Cash')==='Revolut'?Number(e.tip||0):0),0);
+  const tipSumup=es.reduce((s,e)=>s+((e.tipPayment||'Cash')==='SumUp'?Number(e.tip||0):0),0);
   return {
     es,
     revenue:es.reduce((s,e)=>s+entryTotal(e),0),
