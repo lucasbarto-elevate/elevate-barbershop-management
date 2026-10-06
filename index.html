@@ -180,10 +180,10 @@ body.ipad-mode .ipad-page h1{font-size:34px}
 <section id="commissions" class="page"><h1>Comissões</h1><div class="sub">Fechamento por barbeiro — escolha dia, semana, mês, ano ou um período personalizado.</div>
 <div class="card" style="margin:18px 0">
   <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
-    <button type="button" class="card cash-period-card" data-comm-period="today" onclick="setCommissionPeriod('today')" style="text-align:left"><div class="label">Hoje</div><div class="value" style="font-size:24px" id="commCardTodayValue">€0.00</div><div class="small" id="commCardTodayRange">Hoje</div></button>
-    <button type="button" class="card cash-period-card" data-comm-period="week" onclick="setCommissionPeriod('week')" style="text-align:left"><div class="label">Esta semana</div><div class="value" style="font-size:24px" id="commCardWeekValue">€0.00</div><div class="small" id="commCardWeekRange">Segunda a domingo</div></button>
-    <button type="button" class="card cash-period-card" data-comm-period="month" onclick="setCommissionPeriod('month')" style="text-align:left"><div class="label">Este mês</div><div class="value" style="font-size:24px" id="commCardMonthValue">€0.00</div><div class="small" id="commCardMonthRange">Do dia 1 ao último dia</div></button>
-    <button type="button" class="card cash-period-card" data-comm-period="year" onclick="setCommissionPeriod('year')" style="text-align:left"><div class="label">Este ano</div><div class="value" style="font-size:24px" id="commCardYearValue">€0.00</div><div class="small" id="commCardYearRange">Janeiro a dezembro</div></button>
+    <button type="button" class="card cash-period-card" data-comm-period="today" onclick="setCommissionPeriod('today')" style="text-align:left"><div class="label">Hoje</div><div class="value" style="font-size:24px" id="commCardTodayValue">€0.00</div></button>
+    <button type="button" class="card cash-period-card" data-comm-period="week" onclick="setCommissionPeriod('week')" style="text-align:left"><div class="label">Esta semana</div><div class="value" style="font-size:24px" id="commCardWeekValue">€0.00</div></button>
+    <button type="button" class="card cash-period-card" data-comm-period="month" onclick="setCommissionPeriod('month')" style="text-align:left"><div class="label">Este mês</div><div class="value" style="font-size:24px" id="commCardMonthValue">€0.00</div></button>
+    <button type="button" class="card cash-period-card" data-comm-period="year" onclick="setCommissionPeriod('year')" style="text-align:left"><div class="label">Este ano</div><div class="value" style="font-size:24px" id="commCardYearValue">€0.00</div></button>
   </div>
   <div class="card" style="margin-top:14px;background:#f8f8f8">
     <div class="bar"><div><strong>Consultar uma data específica ou período</strong><div class="small">Para um único dia, use a mesma data nos dois campos.</div></div><button type="button" class="primary" onclick="setCommissionCustomRange()">Consultar</button></div>
@@ -729,7 +729,7 @@ function renderDashboard(){
     ['Faturamento',money(revenue)],['Parte da barbearia',money(shopShare)],['Caixinhas',money(tips)],
     ['Clientes',clients],['Serviços vendidos',serviceQty],['Produtos vendidos',productQty],
     ['Comissões',money(totalComm)],['Lançamentos',entries.length]
-  ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div><div class="small">${start} → ${end}</div></div>`).join('');
+  ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');
 
   dashboardPayments.innerHTML=['Cash','Revolut','SumUp'].map(p=>`<div class="card"><div class="label">${p}</div><div class="value">${money(entries.reduce((s,e)=>s+paymentTotal(e,p)+( (e.tipPayment||'Cash')===p ? Number(e.tip||0) : 0 ),0))}</div><div class="small">Serviços + produtos + caixinhas</div></div>`).join('');
 
@@ -895,7 +895,7 @@ function renderCash(){
     ['tips','Caixinhas',money(p.tips)],
     ['entries','Lançamentos',p.es.length]
   ];
-  document.getElementById('cashStats').innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div><div class="small">'+from+' → '+to+'</div></button>').join('');
+  document.getElementById('cashStats').innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div></button>').join('');
   let es=p.es.slice();
   if(cashFilter==='services') es=es.filter(cashHasServices);
   else if(cashFilter==='products') es=es.filter(cashHasProducts);
@@ -928,8 +928,8 @@ function commissionTotalForRange(from,to){
 function updateCommissionPeriodCards(){
   ['today','week','month','year'].forEach(type=>{
     const r=commissionDateRange(type), v=commissionTotalForRange(r.from,r.to), cap=type.charAt(0).toUpperCase()+type.slice(1);
-    const el=document.getElementById('commCard'+cap+'Value'), rg=document.getElementById('commCard'+cap+'Range');
-    if(el)el.textContent=money(v); if(rg)rg.textContent=r.from===r.to?r.from:r.from+' → '+r.to;
+    const el=document.getElementById('commCard'+cap+'Value');
+    if(el)el.textContent=money(v);
   });
   document.querySelectorAll('[data-comm-period]').forEach(el=>el.classList.toggle('selected',el.dataset.commPeriod===commissionPeriod));
 }
