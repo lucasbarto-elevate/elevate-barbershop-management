@@ -5,5 +5,8 @@
   "type": "module",
   "dependencies": {
     "@netlify/blobs": "latest"
+  },
+  "scripts": {
+    "test": "node --test"
   }
 }

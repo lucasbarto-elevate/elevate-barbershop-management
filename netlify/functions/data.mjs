@@ -1,7 +1,8 @@
 import { getStore } from '@netlify/blobs';
 import { seed } from './_seed.mjs';
+import { STORE_NAMES } from './_store-names.mjs';
 
-const store = getStore({ name:'elevate-db', consistency:'strong' });
+const store = getStore({ name:STORE_NAMES.primary, consistency:'strong' });
 const CATALOG_KEY='catalog';
 const LEGACY_KEY='database';
 const ENTRY_PREFIX='entries/';
@@ -18,33 +19,37 @@ function catalogFromSource(source){
   };
 }
 
-async function getCatalog(){
-  let catalog=await store.get(CATALOG_KEY,{type:'json',consistency:'strong'});
+async function getCatalog(dataStore){
+  let catalog=await dataStore.get(CATALOG_KEY,{type:'json',consistency:'strong'});
   if(catalog?.settings && catalog?.barbers?.length && catalog?.services?.length && catalog?.products?.length) return catalog;
-  const legacy=await store.get(LEGACY_KEY,{type:'json',consistency:'strong'});
-  catalog=catalogFromSource(legacy||catalog||cloneSeed());
-  await store.setJSON(CATALOG_KEY,catalog);
-  return catalog;
+  const legacy=await dataStore.get(LEGACY_KEY,{type:'json',consistency:'strong'});
+  // GET remains read-only: retain the historical fallback response without repairing
+  // the primary store as a side effect of a normal read.
+  return catalogFromSource(legacy||catalog||cloneSeed());
 }
 
-async function readEntries(){
-  const result=await store.list({prefix:ENTRY_PREFIX});
+async function readEntries(dataStore){
+  const result=await dataStore.list({prefix:ENTRY_PREFIX});
   const blobs=result?.blobs||[];
   if(!blobs.length) return [];
-  const rows=await Promise.all(blobs.map(b=>store.get(b.key,{type:'json',consistency:'strong'})));
+  const rows=await Promise.all(blobs.map(b=>dataStore.get(b.key,{type:'json',consistency:'strong'})));
   return rows.filter(Boolean).sort((a,b)=>String((b.date||'')+(b.time||'')).localeCompare(String((a.date||'')+(a.time||''))));
 }
 
-export default async ()=>{
-  try{
-    const [catalog,entries,version]=await Promise.all([
-      getCatalog(),
-      readEntries(),
-      store.get(VERSION_KEY,{type:'json',consistency:'strong'})
-    ]);
-    return Response.json({...catalog,entries,version:version?.version||0,ok:true},{headers:{'Cache-Control':'no-store'}});
-  }catch(err){
-    console.error('[data] failed',err);
-    return Response.json({ok:false,error:'Banco remoto temporariamente indisponível.'},{status:503,headers:{'Cache-Control':'no-store'}});
-  }
-};
+export function createDataHandler(dataStore = store){
+  return async ()=>{
+    try{
+      const [catalog,entries,version]=await Promise.all([
+        getCatalog(dataStore),
+        readEntries(dataStore),
+        dataStore.get(VERSION_KEY,{type:'json',consistency:'strong'})
+      ]);
+      return Response.json({...catalog,entries,version:version?.version||0,ok:true},{headers:{'Cache-Control':'no-store'}});
+    }catch(err){
+      console.error('[data] failed',err);
+      return Response.json({ok:false,error:'Banco remoto temporariamente indisponível.'},{status:503,headers:{'Cache-Control':'no-store'}});
+    }
+  };
+}
+
+export default createDataHandler();

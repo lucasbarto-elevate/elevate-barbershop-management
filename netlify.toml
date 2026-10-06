@@ -1,6 +1,12 @@
 [functions]
   directory = "netlify/functions"
 
+[functions."backup-scheduled"]
+  schedule = "0 2 * * *"
+
+[functions."backup-retention"]
+  schedule = "0 3 * * *"
+
 [[redirects]]
   from = "/api/data"
   to = "/.netlify/functions/data"
@@ -19,6 +25,11 @@
 [[redirects]]
   from = "/api/health"
   to = "/.netlify/functions/health"
+  status = 200
+
+[[redirects]]
+  from = "/api/backup-admin"
+  to = "/.netlify/functions/backup-admin"
   status = 200
 
 # SPA fallback for any normal application route.
