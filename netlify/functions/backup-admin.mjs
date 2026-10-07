@@ -10,6 +10,12 @@ export default async req => {
   try { body = await req.json(); } catch { return Response.json({ ok: false, error: 'JSON inválido.' }, { status: 400 }); }
   const readToken = process.env.BACKUP_READ_TOKEN;
   const restoreToken = process.env.BACKUP_RESTORE_TOKEN;
+
+  console.log('[backup-admin] token diagnostics', {
+    readTokenPresent: Boolean(readToken),
+    restoreTokenPresent: Boolean(restoreToken),
+    tokensEqual: Boolean(readToken && restoreToken && readToken === restoreToken)
+  });
   if (!readToken || !restoreToken || readToken === restoreToken) {
     return Response.json({ ok: false, error: 'Configuração administrativa inválida.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
