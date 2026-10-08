@@ -12,6 +12,7 @@ import { createDataHandler } from '../netlify/functions/data.mjs';
 import { createVersionHandler } from '../netlify/functions/version.mjs';
 import { checksumSnapshot } from '../netlify/functions/_backup.mjs';
 import { beginSyncJournal } from '../netlify/functions/_sync-journal.mjs';
+import { assertCatalogInitializationEnabled, initializeCatalog } from '../netlify/functions/_initialize-catalog.mjs';
 
 class FakeStore {
   constructor(initial = {}) {
@@ -171,6 +172,78 @@ test('backup failure does not publish a valid snapshot', async () => {
   world.primary.list = async () => { throw new Error('simulated read fault'); };
   await assert.rejects(() => createBackup(world), /simulated read fault/);
   assert.equal((await listBackups(world.backups)).length, 0);
+});
+
+test('explicit initializer creates only catalog in an empty store and is idempotent', async () => {
+  const primary = new FakeStore();
+  const control = new FakeStore();
+  const seedCatalog = makeTestCatalog();
+  const first = await initializeCatalog({ primary, control, seedCatalog });
+  assert.equal(first.initialized, true);
+  assert.equal(first.source, 'seed-catalog');
+  assert.deepEqual(await primary.get('catalog'), seedCatalog);
+  assert.equal(await primary.get('database'), null);
+  assert.equal(await primary.get('sync-version'), null);
+  assert.deepEqual((await primary.list({ prefix: 'entries/' })).blobs, []);
+  const second = await initializeCatalog({ primary, control, seedCatalog });
+  assert.deepEqual(second, { initialized: false, reason: 'catalog-already-present' });
+  assert.deepEqual(await primary.get('catalog'), seedCatalog);
+});
+
+test('initializer copies a complete legacy catalog without deleting or changing database', async () => {
+  const legacy = makeTestCatalog();
+  legacy.entries = [{ id: 'legacy-test-entry' }];
+  const primary = new FakeStore({ database: legacy });
+  const control = new FakeStore();
+  const result = await initializeCatalog({ primary, control, seedCatalog: makeTestCatalog() });
+  assert.equal(result.initialized, true);
+  assert.equal(result.source, 'legacy-database');
+  assert.deepEqual(await primary.get('catalog'), makeTestCatalog());
+  assert.deepEqual(await primary.get('database'), legacy);
+});
+
+test('initializer refuses partial catalog, legacy data, or existing entries without overwriting', async () => {
+  for (const initial of [
+    { catalog: { settings: { name: 'partial test' } } },
+    { database: { settings: { name: 'partial test' } } },
+    { 'entries/test-entry-existing': makeTestEntry('test-entry-existing') }
+  ]) {
+    const primary = new FakeStore(initial);
+    const before = cloneValues(primary);
+    await assert.rejects(() => initializeCatalog({ primary, control: new FakeStore(), seedCatalog: makeTestCatalog() }));
+    assert.deepEqual(cloneValues(primary), before);
+  }
+});
+
+test('catalog initialization endpoint requires explicit staging arming and restore authorization', async () => {
+  const oldRead = process.env.BACKUP_READ_TOKEN;
+  const oldRestore = process.env.BACKUP_RESTORE_TOKEN;
+  const oldAllow = process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION;
+  process.env.BACKUP_READ_TOKEN = 'read-test-token';
+  process.env.BACKUP_RESTORE_TOKEN = 'restore-test-token';
+  process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION = 'true';
+  try {
+    const readResponse = await adminHandler(new Request('https://example.test/api/backup-admin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer read-test-token' },
+      body: JSON.stringify({ action: 'initialize-catalog' })
+    }));
+    assert.equal(readResponse.status, 401);
+    const response = await adminHandler(new Request('https://example.test/api/backup-admin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer restore-test-token' },
+      body: JSON.stringify({ action: 'initialize-catalog' })
+    }));
+    assert.equal(response.status, 403); // The test module uses production defaults.
+  } finally {
+    if (oldRead === undefined) delete process.env.BACKUP_READ_TOKEN; else process.env.BACKUP_READ_TOKEN = oldRead;
+    if (oldRestore === undefined) delete process.env.BACKUP_RESTORE_TOKEN; else process.env.BACKUP_RESTORE_TOKEN = oldRestore;
+    if (oldAllow === undefined) delete process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION; else process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION = oldAllow;
+  }
+});
+
+test('catalog initialization requires staging store overrides and the temporary arming flag', () => {
+  assert.throws(() => assertCatalogInitializationEnabled({ isDefaultProductionConfig: true, allowFlag: 'true' }), /apenas com configuração de staging/);
+  assert.throws(() => assertCatalogInitializationEnabled({ isDefaultProductionConfig: false, allowFlag: undefined }), /flag temporária ativa/);
+  assert.doesNotThrow(() => assertCatalogInitializationEnabled({ isDefaultProductionConfig: false, allowFlag: 'true' }));
 });
 
 test('backup budget expiry leaves no valid snapshot even under slow simulated Blob reads', async () => {

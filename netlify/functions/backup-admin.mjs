@@ -3,6 +3,9 @@ import { applyRestore, createRestorePreview, fingerprintData, readRemoteSnapshot
 import { acquireLock, CONTROL_STORE_NAME, readRecoveryState, releaseLock } from './_coordination.mjs';
 import { rollbackSyncJournal } from './_sync-journal.mjs';
 import { hasAdminAuthorization } from './_admin-auth.mjs';
+import { assertCatalogInitializationEnabled, initializeCatalog } from './_initialize-catalog.mjs';
+import { seed } from './_seed.mjs';
+import { IS_DEFAULT_PRODUCTION_CONFIG } from './_store-names.mjs';
 
 export default async req => {
   if (req.method !== 'POST') return Response.json({ ok: false, error: 'Method not allowed' }, { status: 405 });
@@ -10,16 +13,10 @@ export default async req => {
   try { body = await req.json(); } catch { return Response.json({ ok: false, error: 'JSON inválido.' }, { status: 400 }); }
   const readToken = process.env.BACKUP_READ_TOKEN;
   const restoreToken = process.env.BACKUP_RESTORE_TOKEN;
-
-  console.log('[backup-admin] token diagnostics', {
-    readTokenPresent: Boolean(readToken),
-    restoreTokenPresent: Boolean(restoreToken),
-    tokensEqual: Boolean(readToken && restoreToken && readToken === restoreToken)
-  });
   if (!readToken || !restoreToken || readToken === restoreToken) {
     return Response.json({ ok: false, error: 'Configuração administrativa inválida.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
-  const restoreAction = ['restore', 'recover'].includes(body?.action);
+  const restoreAction = ['restore', 'recover', 'initialize-catalog'].includes(body?.action);
   const secret = restoreAction ? restoreToken : readToken;
   if (!hasAdminAuthorization(req.headers.get('authorization'), secret)) return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   try {
@@ -30,6 +27,17 @@ export default async req => {
     if (body.action === 'list') result = await listBackups(backups);
     else if (body.action === 'preview') result = await createRestorePreview({ primary, backups, control, backupKey: body.backupKey });
     else if (body.action === 'restore') result = await applyRestore({ primary, backups, control, preview: body.preview, confirmation: body.confirmation });
+    else if (body.action === 'initialize-catalog') {
+      try {
+        assertCatalogInitializationEnabled({
+          isDefaultProductionConfig: IS_DEFAULT_PRODUCTION_CONFIG,
+          allowFlag: process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION
+        });
+      } catch (error) {
+        return Response.json({ ok: false, error: error.message }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+      }
+      result = await initializeCatalog({ primary, control, seedCatalog: seed });
+    }
     else if (body.action === 'recovery-status') result = (await readRecoveryState(control)).value || { required: false };
     else if (body.action === 'recovery-preview') {
       const recovery = (await readRecoveryState(control)).value;

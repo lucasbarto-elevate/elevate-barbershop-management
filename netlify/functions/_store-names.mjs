@@ -45,3 +45,4 @@ export function resolveStoreNames(env = process.env) {
 // Evaluated in the Netlify Functions runtime. This module is never imported by
 // frontend code, and all Functions use this single environment configuration.
 export const STORE_NAMES = resolveStoreNames();
+export const IS_DEFAULT_PRODUCTION_CONFIG = STORE_NAMES === DEFAULTS;

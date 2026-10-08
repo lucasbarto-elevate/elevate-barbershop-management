@@ -32,3 +32,5 @@ node scripts/backup-admin.mjs recover
 ```
 
 A ferramenta pede os tokens sem os mostrar no terminal. A restauração apresenta a pré-visualização, pede confirmação digitada e volta a validar que os dados remotos não mudaram antes de aplicar. A pré-visualização e a restauração são operações administrativas fora do frontend público.
+
+Para inicializar explicitamente um store de staging vazio, configure temporariamente `BACKUP_ALLOW_CATALOG_INITIALIZATION=true` apenas no site de staging e execute `node scripts/backup-admin.mjs initialize-catalog`. A ação exige o token RESTORE, confirmação digitada e stores de staging configurados; é recusada com os defaults de produção. Cria apenas a chave `catalog`, não importa lançamentos de exemplo do seed, não substitui um catálogo parcial e recusa stores com entries ou `sync-version` sem catálogo. Se `database` legado estiver completo, copia somente os campos do catálogo e mantém a chave original. Remova o flag após a inicialização. Depois, execute `backup-scheduled` manualmente e confirme o snapshot.

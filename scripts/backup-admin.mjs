@@ -79,8 +79,13 @@ try {
       const restoreToken = await promptSecret('Token BACKUP_RESTORE_TOKEN: ');
       console.log(await call('recover', restoreToken, { preview, confirmation: preview.backupId }));
     }
+  } else if (command === 'initialize-catalog') {
+    const answer = await prompt('Para inicializar o catálogo vazio do staging, escreva INITIALIZE STAGING CATALOG: ');
+    if (answer !== 'INITIALIZE STAGING CATALOG') throw new Error('Confirmação não corresponde; nada foi inicializado.');
+    const restoreToken = await promptSecret('Token BACKUP_RESTORE_TOKEN: ');
+    console.log(await call('initialize-catalog', restoreToken));
   } else {
-    throw new Error('Comandos: list | restore snapshots/<id> | recovery-status | recover');
+    throw new Error('Comandos: list | restore snapshots/<id> | recovery-status | recover | initialize-catalog');
   }
 } catch (error) {
   console.error('[backup-admin] falhou:', error?.message || error);
