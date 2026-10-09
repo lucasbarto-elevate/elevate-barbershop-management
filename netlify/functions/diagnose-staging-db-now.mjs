@@ -76,6 +76,7 @@ export function createStagingDbDiagnostic({ env = process.env, getStoreImpl = ge
         catalogComplete: result.catalog.complete,
         databaseExists: result.database.exists,
         syncVersionExists: result.syncVersion.exists,
+        syncVersion: result.syncVersion.version,
         entriesCount
       });
       return json({ ok: true, result });

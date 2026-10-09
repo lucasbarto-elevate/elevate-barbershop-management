@@ -116,9 +116,22 @@ test('diagnostic logs only sanitized presence and count fields and hides read er
   const logs = [];
   const originalInfo = console.info;
   const originalError = console.error;
-  console.info = (...args) => logs.push(args.join(' '));
-  console.error = (...args) => logs.push(args.join(' '));
+  console.info = (...args) => logs.push(JSON.stringify(args));
+  console.error = (...args) => logs.push(JSON.stringify(args));
   try {
+    const valuesFn = createStagingDbDiagnostic({ env, getStoreImpl: () => ({
+      async getWithMetadata(key) {
+        const values = {
+          catalog: { etag: 'safe-etag', data: { settings: {}, barbers: [], services: [], products: [] } },
+          database: null,
+          'sync-version': { etag: 'safe-etag', data: { version: 7 } }
+        };
+        return values[key];
+      },
+      async list() { return { blobs: [{ key: 'entries/private-id' }] }; }
+    }) });
+    await valuesFn(event());
+    assert.match(logs.join(' '), /"syncVersion":7/);
     const readFn = createStagingDbDiagnostic({ env, getStoreImpl: () => ({
       async getWithMetadata(key) { return key === 'catalog' ? { etag: 'sensitive-etag', data: { settings: {}, barbers: [], services: [], products: [] } } : null; },
       async list() { return { blobs: [{ key: 'entries/private-id' }] }; }
