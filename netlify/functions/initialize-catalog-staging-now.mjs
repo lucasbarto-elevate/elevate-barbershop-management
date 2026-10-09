@@ -1,6 +1,6 @@
 import { isStagingAdminEndpoint, isStagingConfiguration } from './initialize-catalog-staging.mjs';
 
-const STAGING_ADMIN_ENDPOINT = 'https://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin';
+const STAGING_ADMIN_ENDPOINT = 'https://elevate-barbershop-staging.netlify.app/.netlify/functions/backup-admin';
 
 function json(body, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });

@@ -7,7 +7,7 @@ const STAGING_STORES = Object.freeze({
   backups: 'elevate-db-backups-staging'
 });
 
-const STAGING_ADMIN_ENDPOINT = 'https://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin';
+const STAGING_ADMIN_ENDPOINT = 'https://elevate-barbershop-staging.netlify.app/.netlify/functions/backup-admin';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
 function json(body, status) {
@@ -34,7 +34,7 @@ export function isStagingAdminEndpoint(endpoint) {
     const url = new URL(endpoint);
     return url.href === STAGING_ADMIN_ENDPOINT
       && url.protocol === 'https:'
-      && url.hostname === 'elevatebarbershop-staging.netlify.app'
+      && url.hostname === 'elevate-barbershop-staging.netlify.app'
       && url.pathname === '/.netlify/functions/backup-admin'
       && !url.username && !url.password && !url.search && !url.hash;
   } catch {

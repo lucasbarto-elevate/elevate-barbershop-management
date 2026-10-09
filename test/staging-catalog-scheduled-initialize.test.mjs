@@ -10,7 +10,7 @@ const env = {
   BACKUP_RESTORE_TOKEN: restore,
   BACKUP_READ_TOKEN: 'synthetic-read-token-for-scheduled-tests',
   STAGING_CATALOG_INITIALIZE_TOKEN: init,
-  BACKUP_ADMIN_URL: 'https://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin',
+  BACKUP_ADMIN_URL: 'https://elevate-barbershop-staging.netlify.app/.netlify/functions/backup-admin',
   ELEVATE_DB_STORE_NAME: 'elevate-db-staging',
   ELEVATE_DB_CONTROL_STORE_NAME: 'elevate-db-control-staging',
   ELEVATE_DB_BACKUPS_STORE_NAME: 'elevate-db-backups-staging'
@@ -72,6 +72,7 @@ test('scheduled initializer fails closed for production/default, partial, or una
     { ...env, STAGING_CATALOG_INITIALIZE_TOKEN: restore },
     { ...env, BACKUP_RESTORE_TOKEN: undefined },
     { ...env, BACKUP_READ_TOKEN: restore },
+    { ...env, BACKUP_ADMIN_URL: 'https://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin' },
     { ...env, BACKUP_ADMIN_URL: 'https://elevatebarbershop.ie/.netlify/functions/backup-admin' }
   ];
   for (const candidate of cases) {

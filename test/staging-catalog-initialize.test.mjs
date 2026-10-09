@@ -14,14 +14,14 @@ const stagingEnv = {
   BACKUP_RESTORE_TOKEN: restoreSecret,
   BACKUP_READ_TOKEN: 'synthetic-read-token-for-tests',
   STAGING_CATALOG_INITIALIZE_TOKEN: initializeSecret,
-  BACKUP_ADMIN_URL: 'https://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin',
+  BACKUP_ADMIN_URL: 'https://elevate-barbershop-staging.netlify.app/.netlify/functions/backup-admin',
   ELEVATE_DB_STORE_NAME: 'elevate-db-staging',
   ELEVATE_DB_CONTROL_STORE_NAME: 'elevate-db-control-staging',
   ELEVATE_DB_BACKUPS_STORE_NAME: 'elevate-db-backups-staging'
 };
 
 function request({ method = 'POST', body = { action: 'initialize-catalog' }, authorization = `Bearer ${initializeSecret}` } = {}) {
-  return new Request('https://elevatebarbershop-staging.netlify.app/.netlify/functions/initialize-catalog-staging', {
+  return new Request('https://elevate-barbershop-staging.netlify.app/.netlify/functions/initialize-catalog-staging', {
     method,
     headers: { ...(authorization ? { Authorization: authorization } : {}), ...(method === 'GET' ? {} : { 'Content-Type': 'application/json' }) },
     ...(method === 'GET' ? {} : { body: JSON.stringify(body) })
@@ -44,11 +44,12 @@ test('temporary initializer accepts only the exact staging store configuration a
 test('temporary initializer accepts only the exact HTTPS staging admin endpoint', () => {
   assert.equal(isStagingAdminEndpoint(stagingEnv.BACKUP_ADMIN_URL), true);
   for (const endpoint of [
+    'https://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin',
     'http://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin',
     'https://elevatebarbershop.ie/.netlify/functions/backup-admin',
-    'https://elevatebarbershop-staging.netlify.app.evil.test/.netlify/functions/backup-admin',
-    'https://elevatebarbershop-staging.netlify.app/.netlify/functions/backup-admin?target=prod',
-    'https://elevatebarbershop-staging.netlify.app/.netlify/functions/other'
+    'https://elevate-barbershop-staging.netlify.app.evil.test/.netlify/functions/backup-admin',
+    'https://elevate-barbershop-staging.netlify.app/.netlify/functions/backup-admin?target=prod',
+    'https://elevate-barbershop-staging.netlify.app/.netlify/functions/other'
   ]) assert.equal(isStagingAdminEndpoint(endpoint), false, endpoint);
 });
 
