@@ -492,18 +492,131 @@ function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.ge
 function money(n){return db.settings.currency+Number(n).toFixed(2)}
 function barberName(id){return db.barbers.find(x=>x.id==id)?.name||'—'}
 function serviceObj(name){return db.services.find(x=>x.name===name)}
-function navInit(){let items=[['dashboard','Dashboard'],['revenue','Faturamento'],['team','Equipe'],['services','Serviços'],['products','Produtos'],['cash','Caixa'],['commissions','Comissões'],['history','Histórico'],['ipad','Área dos Barbeiros'],['settings','Configurações']];nav.innerHTML=items.map(x=>x[0]==='ipad'?`<button class="navbtn" onclick="openBarberPage()">${x[1]}</button>`:`<button class="navbtn" onclick="show('${x[0]}')">${x[1]}</button>`).join('')}
+function navInit(){
+  const items=[['dashboard','Dashboard'],['revenue','Faturamento'],['team','Equipe'],['services','Serviços'],['products','Produtos'],['cash','Caixa'],['commissions','Comissões'],['history','Histórico'],['ipad','Área dos Barbeiros'],['settings','Configurações']];
+  nav.replaceChildren(...items.map(([page,label])=>{
+    const button=document.createElement('button');button.className='navbtn';button.textContent=label;
+    button.dataset.elevateAction='nav';button.dataset.page=page;return button;
+  }));
+}
 function initHistory(){
   const sel=document.getElementById('histBarber');
   if(!sel) return;
   const current=sel.value||'all';
-  sel.innerHTML='<option value="all">Todos os barbeiros</option>'+db.barbers.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  sel.replaceChildren(new Option('Todos os barbeiros','all'),...db.barbers.map(b=>new Option(String(b.name??''),String(b.id??''))));
   sel.value=current;
   const d=document.getElementById('histDate');
   if(d && !d.value) d.value=new Date().toISOString().slice(0,10);
 }
 function dateOnly(d){return d.toISOString().slice(0,10)}
 function startOfWeek(d){let x=new Date(d);let day=x.getDay();let diff=day===0?-6:1-day;x.setDate(x.getDate()+diff);x.setHours(0,0,0,0);return x}
+let safeHTMLSlotId=0;
+const safeHTMLFragments=new WeakSet();
+function appendSafeHTMLValue(parent,value){
+  if(value==null)return;
+  if(value instanceof Node){if(!safeHTMLFragments.has(value))throw new TypeError('Só fragmentos criados por safeHTML podem ser inseridos como markup.');parent.append(value);return;}
+  if(Array.isArray(value)){value.forEach(item=>appendSafeHTMLValue(parent,item));return;}
+  parent.append(document.createTextNode(String(value)));
+}
+function safeHTMLMarkup(strings,slots){
+  let markup=strings[0];
+  for(let i=0;i<slots.length;i++)markup+='<!--'+slots[i]+'-->'+strings[i+1];
+  return markup;
+}
+function safeHTML(strings,...values){
+  const slots=values.map(()=>`__ELEVATE_TEXT_${safeHTMLSlotId++}__`);
+  const markup=safeHTMLMarkup(strings,slots);
+  const template=document.createElement('template');
+  template.innerHTML=markup; // Only literal markup and generated markers reach the HTML parser.
+  const elements=template.content.querySelectorAll('*');
+  for(const element of elements){
+    for(const attribute of element.attributes){
+      if(slots.some(slot=>attribute.value.includes(slot)))throw new Error('Valores dinâmicos não podem ser interpolados em atributos HTML.');
+    }
+  }
+  const walker=document.createTreeWalker(template.content,NodeFilter.SHOW_COMMENT);
+  const placeholders=[];
+  while(walker.nextNode())placeholders.push(walker.currentNode);
+  for(const placeholder of placeholders){
+    const source=placeholder.data||'';
+    if(!slots.some(slot=>source.includes(slot)))continue;
+    const replacement=document.createDocumentFragment();
+    const pattern=new RegExp(slots.map(slot=>slot.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'g');
+    let offset=0,match;
+    while((match=pattern.exec(source))){
+      replacement.append(document.createTextNode(source.slice(offset,match.index)));
+      appendSafeHTMLValue(replacement,values[slots.indexOf(match[0])]);
+      offset=match.index+match[0].length;
+    }
+    replacement.append(document.createTextNode(source.slice(offset)));
+    placeholder.replaceWith(replacement);
+  }
+  safeHTMLFragments.add(template.content);
+  return template.content;
+}
+function setSafeContent(target,content){const fragment=document.createDocumentFragment();appendSafeHTMLValue(fragment,content);target.replaceChildren(fragment);}
+function optionNodes(items,selectedValue){
+  const fragment=document.createDocumentFragment();
+  for(const item of items){
+    const option=new Option(String(item.label??''),String(item.value??''));
+    option.selected=String(item.value)===String(selectedValue);
+    fragment.append(option);
+  }
+  return fragment;
+}
+document.addEventListener('click',event=>{
+  const control=event.target.closest('[data-elevate-action]');
+  if(!control)return;
+  const {elevateAction:action,id,index,filter,page,payment}=control.dataset;
+  switch(action){
+    case 'nav': if(page==='ipad')openBarberPage();else show(page);break;
+    case 'cash-filter':setCashFilter(filter);break;
+    case 'open-barber':openBarber(Number(id));break;
+    case 'delete-barber':delBarber(Number(id));break;
+    case 'open-service':openService(Number(id));break;
+    case 'delete-service':delService(Number(id));break;
+    case 'open-product':openProduct(Number(id));break;
+    case 'delete-product':delProduct(Number(id));break;
+    case 'open-entry':openEntry(Number(id));break;
+    case 'delete-entry':delEntry(Number(id));break;
+    case 'edit-save-barber':saveBarber(Number(id));break;
+    case 'edit-save-service':saveService(Number(id));break;
+    case 'edit-save-product':saveProduct(Number(id));break;
+    case 'edit-save-entry':saveEntry(Number(id));break;
+    case 'edit-delete-entry':closeModal();delEntry(Number(id));break;
+    case 'edit-add-service':addEditServiceRow();break;
+    case 'edit-remove-service':removeEditServiceRow(Number(index));break;
+    case 'edit-add-product':addEditProductRow();break;
+    case 'edit-remove-product':removeEditProductRow(Number(index));break;
+    case 'ipad-choose-barber':ipadChooseBarber(Number(id));break;
+    case 'ipad-choose-service':ipadChooseService(Number(id));break;
+    case 'ipad-remove-service':ipadRemoveService(Number(id));break;
+    case 'ipad-choose-product':ipadChooseProduct(Number(id));break;
+    case 'ipad-remove-product':ipadRemoveProduct(Number(id));break;
+    case 'ipad-choose-clients':ipadChooseClients(index);break;
+    case 'ipad-payment':ipadPayment(payment);break;
+    case 'ipad-product-payment':ipadProductPayment(payment);break;
+    case 'ipad-tip-payment':ipadTipPaymentChoose(payment);break;
+    case 'ipad-save':ipadSave();break;
+    case 'ipad-back':ipadBack();break;
+    case 'ipad-today':ipadTodayEntries.scrollIntoView({behavior:'smooth'});break;
+    case 'show-products':show('products');break;
+  }
+});
+document.addEventListener('input',event=>{
+  if(event.target.matches('[data-entry-edit-input]'))updateEntryEditPreview();
+  if(event.target.matches('[data-entry-edit-search]'))renderHistory();
+  if(event.target.id==='ipadTip')ipadUpdate();
+});
+document.addEventListener('change',event=>{
+  const target=event.target;
+  if(target.matches('[data-entry-edit-select]')){
+    const {entryEditSelect,index}=target.dataset;
+    if(entryEditSelect==='service')editServiceRowChanged(Number(index));
+    else if(entryEditSelect==='product')editProductRowChanged(Number(index));
+    else updateEntryEditPreview();
+  }else if(target.matches('[data-entry-edit-input]'))updateEntryEditPreview();
+});
 function setRevenuePeriod(type){
   const now=new Date(); let s=new Date(now), e=new Date(now);
   if(type==='today'){}
@@ -519,7 +632,7 @@ function initRevenueBarberFilter(){
   const sel=document.getElementById('revBarber');
   if(!sel) return;
   const current=sel.value||'all';
-  sel.innerHTML='<option value="all">Todos os barbeiros</option>'+db.barbers.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  sel.replaceChildren(new Option('Todos os barbeiros','all'),...db.barbers.map(b=>new Option(String(b.name??''),String(b.id??''))));
   sel.value=current;
 }
 function renderRevenueHistory(){
@@ -532,19 +645,19 @@ function renderRevenueHistory(){
   const products=es.reduce((a,x)=>a+entryProductTotal(x),0);
   const tips=es.reduce((a,x)=>a+Number(x.tip||0),0);
   const total=services+products;
-  revenueHistorySummary.innerHTML=[
+  setSafeContent(revenueHistorySummary,safeHTML`${[
     ['Faturamento',money(total)],['Parte da barbearia',money(es.reduce((a,x)=>{const b=db.barbers.find(bb=>bb.id==x.barber);return a+entryServiceTotal(x)+entryProductTotal(x)-entryServiceTotal(x)*barberServiceCommissionRate(b)/100-entryProductCommission(x)+(isShopBarber(b)?Number(x.tip||0):0)},0))],['Serviços',money(services)],['Produtos',money(products)],['Serviços vendidos',es.reduce((a,x)=>a+entryServiceQty(x),0)],['Produtos vendidos',es.reduce((a,x)=>a+entryProductQty(x),0)],['Caixinhas',money(tips)],['Clientes',es.reduce((a,x)=>a+entryClients(x),0)],['Lançamentos',es.length]
-  ].map(x=>`<div class="card"><div class="small">${x[0]}</div><div class="value" style="font-size:22px">${x[1]}</div></div>`).join('');
+  ].map(x=>safeHTML`<div class="card"><div class="small">${x[0]}</div><div class="value" style="font-size:22px">${x[1]}</div></div>`)}`);
 
   // Detailed launch list grouped by barber, with the same information recorded on the iPad.
   const barberGroups=db.barbers.map(b=>[b,es.filter(x=>String(x.barber)===String(b.id))]).filter(x=>x[1].length);
-  revenueBarberDetails.innerHTML=barberGroups.length ? barberGroups.map(([b,list])=>{
+  setSafeContent(revenueBarberDetails,barberGroups.length ? barberGroups.map(([b,list])=>{
     const st=list.reduce((a,x)=>a+entryServiceTotal(x),0);
     const pt=list.reduce((a,x)=>a+entryProductTotal(x),0);
     const tt=list.reduce((a,x)=>a+Number(x.tip||0),0);
     const sc=st*barberServiceCommissionRate(b)/100;
     const pc=isShopBarber(b)?0:list.reduce((a,x)=>a+entryProductCommission(x),0);
-    return `<div class="card" style="margin-bottom:18px">
+    return safeHTML`<div class="card" style="margin-bottom:18px">
       <div class="bar">
         <div><h2 style="margin:0">${b.name}</h2><div class="small">${list.length} lançamento(s) · ${list.reduce((a,x)=>a+entryClients(x),0)} cliente(s) no período</div></div>
         <div style="text-align:right"><strong>${money(st+pt)}</strong><div class="small">Comissão: ${money(sc+pc)}</div></div>
@@ -560,29 +673,30 @@ function renderRevenueHistory(){
       </tr></thead><tbody>
       ${list.slice().sort((a,b)=>`${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).map(x=>{
         const sv=Number(x.total||0)-Number(x.productPrice||0);
-        return `<tr>
+        return safeHTML`<tr>
           <td>${x.date||'—'}</td><td><b>${x.time||'—'}</b></td><td>${entryClients(x)}</td><td>${x.service||'—'}</td>
           <td>${x.productName||'—'}</td><td>${x.payment||'—'}</td><td>${money(sv)}</td>
           <td>${money(x.productPrice||0)}</td><td>${money(x.tip||0)}</td><td>${x.tip?(x.tipPayment||'Cash'):'—'}</td>
           <td><b>${money(x.total||0)}</b></td>
         </tr>`;
-      }).join('')}
+      })}
       </tbody></table>
     </div>`
-  }).join('') : '<div class="card"><strong>Nenhum lançamento encontrado para este período/barbeiro.</strong></div>';
+  }) : safeHTML`<div class="card"><strong>Nenhum lançamento encontrado para este período/barbeiro.</strong></div>`);
 
   const days={};
   es.forEach(x=>(days[x.date]??=[]).push(x));
-  revenueHistory.innerHTML=Object.entries(days).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,list])=>{
+  const dayRows=Object.entries(days).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,list])=>{
     const st=list.reduce((a,x)=>a+entryServiceTotal(x),0);
     const pt=list.reduce((a,x)=>a+entryProductTotal(x),0);
     const tt=list.reduce((a,x)=>a+Number(x.tip||0),0);
-    return `<div class="card" style="margin-bottom:12px">
+    return safeHTML`<div class="card" style="margin-bottom:12px">
       <div class="bar"><div><h3 style="margin:0">${date}</h3><div class="small">${list.length} lançamento(s)</div></div><strong>${money(st+pt)}</strong></div>
       <div class="small" style="margin-top:8px">Serviços ${money(st)} · Produtos ${money(pt)} · Caixinhas ${money(tt)}</div>
       <div class="small" style="margin-top:6px">Pagamentos: Cash ${money(list.reduce((a,x)=>a+paymentTotal(x,'Cash'),0))} · Revolut ${money(list.reduce((a,x)=>a+paymentTotal(x,'Revolut'),0))} · SumUp ${money(list.reduce((a,x)=>a+paymentTotal(x,'SumUp'),0))}</div>
     </div>`
-  }).join('')||'<div class="card"><strong>Nenhum faturamento no período.</strong></div>';
+  });
+  setSafeContent(revenueHistory,dayRows.length?dayRows:safeHTML`<div class="card"><strong>Nenhum faturamento no período.</strong></div>`);
 }
 
 function renderHistory(){
@@ -601,7 +715,7 @@ function renderHistory(){
   const productTotal=es.reduce((s,e)=>s+entryProductTotal(e),0);
   const tipTotal=es.reduce((s,e)=>s+Number(e.tip||0),0);
   const grand=serviceTotal+productTotal;
-  historySummary.innerHTML=[
+  setSafeContent(historySummary,safeHTML`${[
     ['Lançamentos',es.length],
     ['Serviços',money(serviceTotal)],
     ['Produtos',money(productTotal)],
@@ -609,35 +723,35 @@ function renderHistory(){
     ['Produtos vendidos',es.reduce((a,e)=>a+entryProductQty(e),0)],
     ['Caixinhas',money(tipTotal)],
     ['Total',money(grand)]
-  ].map(x=>`<div class="card"><div class="small">${x[0]}</div><div class="value" style="font-size:22px">${x[1]}</div></div>`).join('');
-  if(!es.length){historyList.innerHTML='<div class="card"><strong>Nenhum lançamento encontrado.</strong><div class="small">Altere a data, barbeiro ou filtros.</div></div>';return}
+  ].map(x=>safeHTML`<div class="card"><div class="small">${x[0]}</div><div class="value" style="font-size:22px">${x[1]}</div></div>`)}`);
+  if(!es.length){setSafeContent(historyList,safeHTML`<div class="card"><strong>Nenhum lançamento encontrado.</strong><div class="small">Altere a data, barbeiro ou filtros.</div></div>`);return}
   const byBarber={};
   es.forEach(e=>(byBarber[e.barber]??=[]).push(e));
-  historyList.innerHTML=Object.entries(byBarber).map(([bid,list])=>{
+  setSafeContent(historyList,Object.entries(byBarber).map(([bid,list])=>{
     const st=list.reduce((s,e)=>s+Number(e.total||0)-entryProductTotal(e),0);
     const pt=list.reduce((s,e)=>s+entryProductTotal(e),0);
     const tt=list.reduce((s,e)=>s+Number(e.tip||0),0);
-    return `<div class="card" style="margin-bottom:16px">
+    return safeHTML`<div class="card" style="margin-bottom:16px">
       <div class="bar"><div><h2 style="margin:0">${barberName(bid)}</h2><div class="small">${list.length} lançamento(s)</div></div><strong>${money(st+pt)}</strong></div>
       <table style="margin-top:14px"><thead><tr>
         <th>Data</th><th>Hora</th><th>Clientes</th><th>Serviço</th><th>Produto</th><th>Pag. serviço</th><th>Valor serviço</th><th>Valor produto</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th>
       </tr></thead><tbody>${list.map(e=>{
         const sv=Number(e.total||0)-entryProductTotal(e);
-        return `<tr>
+        return safeHTML`<tr>
           <td>${e.date||'—'}</td><td><b>${e.time||'—'}</b></td><td>${entryClients(e)||'—'}</td>
-          <td>${getServiceItems(e).map(x=>x.qty+'× '+x.name).join('<br>')||'—'}</td>
-          <td>${getProductItems(e).map(x=>x.qty+'× '+x.name).join('<br>')||'—'}</td>
+          <td>${getServiceItems(e).flatMap(x=>[x.qty+'× ',x.name,safeHTML`<br>`])}</td>
+          <td>${getProductItems(e).flatMap(x=>[x.qty+'× ',x.name,safeHTML`<br>`])}</td>
           <td>${entryServiceTotal(e)>0?(e.servicePayment||e.payment||'—'):'—'}</td>
           <td>${money(entryServiceTotal(e))}</td><td>${money(entryProductTotal(e))}</td>
           <td>${money(e.tip||0)}</td><td>${e.tip?e.tipPayment||'Cash':'—'}</td><td><b>${money(entryTotal(e))}</b></td>
-        </tr>`}).join('')}</tbody></table>
+        </tr>`})}</tbody></table>
       <div class="small" style="margin-top:10px">Serviços: ${money(st)} · Produtos: ${money(pt)} · Caixinhas: ${money(tt)}</div>
     </div>`
-  }).join('');
+  }));
 }
 function applyHostMode(){
   const host=window.location.hostname.toLowerCase();
-  const isBarberHost=host==='barbeiros.elevatebarbershop.ie'||host.startsWith('barbeiros.');
+  const isBarberHost=host==='barbeiros.elevatebarbershop.ie'||host.startsWith('barbeiros.')||new URLSearchParams(window.location.search).get('barber')==='1';
   if(!isBarberHost)return;
   document.body.classList.add('ipad-mode');
   if(nav) nav.style.display='none';
@@ -655,35 +769,20 @@ function applyHostMode(){
   if(typeof renderIpad==='function') renderIpad();
 }
 function openBarberPage(){
-  const w=window.open('', '_blank');
-  if(!w){alert('O navegador bloqueou a nova página. Permita pop-ups para este sistema.');return}
-  const barberPage=document.documentElement.outerHTML;
-  w.document.open();
-  w.document.write(barberPage);
-  w.document.close();
-  w.document.title='Elevate Barber Shop — Área dos Barbeiros';
-  w.addEventListener('load',()=>{
-    w.document.body.classList.add('ipad-mode');
-    w.document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
-    const page=w.document.getElementById('ipad'); if(page) page.classList.add('active');
-    const nav=w.document.getElementById('nav'); if(nav) nav.style.display='none';
-    const h1=page?.querySelector('h1'); if(h1) h1.textContent='Área dos Barbeiros';
-    const sub=page?.querySelector('.sub'); if(sub) sub.textContent='Lançamentos rápidos • Elevate Barber Shop';
-    if(w.document.getElementById('ipadStep1')) w.document.getElementById('ipadStep1').style.display='block';
-    if(w.document.getElementById('ipadStep2')) w.document.getElementById('ipadStep2').style.display='none';
-    w.renderIpad?.();
-  });
+  const url=new URL(window.location.href);url.searchParams.set('barber','1');
+  const w=window.open(url.toString(),'_blank');
+  if(!w)alert('O navegador bloqueou a nova página. Permita pop-ups para este sistema.');
 }
 function show(id){if(id==='ipad'){openBarberPage();return}document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.textContent==={dashboard:'Dashboard',revenue:'Faturamento',team:'Equipe',services:'Serviços',products:'Produtos',cash:'Caixa',commissions:'Comissões',history:'Histórico',ipad:'Área dos Barbeiros',settings:'Configurações'}[id]));render()}
 function renderInfo(){
   const el=document.getElementById('systemInfo');
-  if(el) el.innerHTML=`<div class="bar"><div><h2 style="margin:0">Elevate Barber Shop — Gestão</h2><div class="small">Serviços, produtos, barbeiros, lançamentos, pagamentos, caixinhas, estoque e comissões.</div></div></div>
+  if(el) setSafeContent(el,safeHTML`<div class="bar"><div><h2 style="margin:0">Elevate Barber Shop — Gestão</h2><div class="small">Serviços, produtos, barbeiros, lançamentos, pagamentos, caixinhas, estoque e comissões.</div></div></div>
   <div class="grid stats" style="margin-top:12px">
     <div><span class="small">Barbeiros</span><br><b>${db.barbers.length}</b></div>
     <div><span class="small">Serviços</span><br><b>${db.services.length}</b></div>
     <div><span class="small">Produtos</span><br><b>${db.products.length}</b></div>
     <div><span class="small">Lançamentos</span><br><b>${db.entries.length}</b></div>
-  </div>`;
+  </div>`);
 }
 function render(){brand.textContent=db.settings.name;renderInfo();renderIpad();renderDashboard();if(document.getElementById('history'))renderHistory();if(document.getElementById('revenueHistory')){if(!revStart.value){setRevenuePeriod('month')}else renderRevenueHistory();}renderTeam();renderServices();renderProducts();renderCash();renderCommissions();renderSettings()}
 function entryQtySum(entries,type){return entries.reduce((a,e)=>a+(type==='service'?entryServiceQty(e):entryProductQty(e)),0)}
@@ -731,21 +830,21 @@ function renderDashboard(){
   const shopShare=services+products-totalComm+shopTips;
   const ticket=clients?revenue/clients:0;
 
-  stats.innerHTML=[
+  setSafeContent(stats,safeHTML`${[
     ['Faturamento',money(revenue)],['Parte da barbearia',money(shopShare)],['Caixinhas',money(tips)],
     ['Clientes',clients],['Serviços vendidos',serviceQty],['Produtos vendidos',productQty],
     ['Comissões',money(totalComm)],['Lançamentos',entries.length]
-  ].map(x=>`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`).join('');
+  ].map(x=>safeHTML`<div class="card"><div class="label">${x[0]}</div><div class="value">${x[1]}</div></div>`)}`);
 
-  dashboardPayments.innerHTML=['Cash','Revolut','SumUp'].map(p=>`<div class="card"><div class="label">${p}</div><div class="value">${money(entries.reduce((s,e)=>s+paymentTotal(e,p)+( (e.tipPayment||'Cash')===p ? Number(e.tip||0) : 0 ),0))}</div><div class="small">Serviços + produtos + caixinhas</div></div>`).join('');
+  setSafeContent(dashboardPayments,['Cash','Revolut','SumUp'].map(p=>safeHTML`<div class="card"><div class="label">${p}</div><div class="value">${money(entries.reduce((s,e)=>s+paymentTotal(e,p)+( (e.tipPayment||'Cash')===p ? Number(e.tip||0) : 0 ),0))}</div><div class="small">Serviços + produtos + caixinhas</div></div>`));
 
-  barberCards.innerHTML=db.barbers.map(b=>{
+  setSafeContent(barberCards,db.barbers.map(b=>{
     const es=entries.filter(e=>e.barber==b.id);
     const sr=es.reduce((s,e)=>s+entryServiceTotal(e),0), pr=es.reduce((s,e)=>s+entryProductTotal(e),0);
     const tip=es.reduce((s,e)=>s+Number(e.tip||0),0), sc=sr*barberServiceCommissionRate(b)/100;
     const pc=isShopBarber(b)?0:es.reduce((s,e)=>s+entryProductCommission(e),0);
     const comm=sc+pc, share=sr+pr-comm+(isShopBarber(b)?tip:0);
-    return `<div class="card">
+    return safeHTML`<div class="card">
       <div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div>
       <p class="small"><b>Lançamentos:</b> ${es.length} · <b>Clientes:</b> ${es.reduce((a,e)=>a+entryClients(e),0)}</p>
       <p class="small"><b>Serviços:</b> ${entryQtySum(es,'service')} · <b>Produtos:</b> ${entryQtySum(es,'product')}</p>
@@ -754,7 +853,7 @@ function renderDashboard(){
       <div class="value">${money(sr+pr)}</div>
       <p class="small"><b>Comissão:</b> ${money(comm)} · <b>Parte da barbearia:</b> ${money(share)}</p>
     </div>`;
-  }).join('');
+  }));
 
   const serviceMap={};
   const productMap={};
@@ -764,28 +863,33 @@ function renderDashboard(){
   });
   const topServices=Object.values(serviceMap).sort((a,b)=>b.value-a.value).slice(0,5);
   const topProducts=Object.values(productMap).sort((a,b)=>b.value-a.value).slice(0,5);
-  dashboardDetails.innerHTML=`
+  const topItems=(items,label)=>items.length?safeHTML`<ol style="padding-left:20px">${items.map(x=>safeHTML`<li>${x.name} — ${x.qty} un. · ${money(x.value)}</li>`)}</ol>`:safeHTML`<p class="small">Nenhum ${label} no período.</p>`;
+  setSafeContent(dashboardDetails,safeHTML`
     <div class="grid cards">
       <div class="card"><div class="bar"><strong>Resumo</strong><span class="badge">Ticket médio ${money(ticket)}</span></div>
         <p class="small">Serviços ${money(services)} · Produtos ${money(products)} · Caixinhas ${money(tips)}</p>
         <p class="small">Cash ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Cash')+((e.tipPayment||'Cash')==='Cash'?Number(e.tip||0):0),0))} · Revolut ${money(entries.reduce((s,e)=>s+paymentTotal(e,'Revolut')+((e.tipPayment||'Cash')==='Revolut'?Number(e.tip||0):0),0))} · SumUp ${money(entries.reduce((s,e)=>s+paymentTotal(e,'SumUp')+((e.tipPayment||'Cash')==='SumUp'?Number(e.tip||0):0),0))}</p>
       </div>
-      <div class="card"><strong>Top serviços</strong>${topServices.length?'<ol style="padding-left:20px">'+topServices.map(x=>`<li>${x.name} — ${x.qty} un. · ${money(x.value)}</li>`).join('')+'</ol>':'<p class="small">Nenhum serviço no período.</p>'}</div>
-      <div class="card"><strong>Top produtos</strong>${topProducts.length?'<ol style="padding-left:20px">'+topProducts.map(x=>`<li>${x.name} — ${x.qty} un. · ${money(x.value)}</li>`).join('')+'</ol>':'<p class="small">Nenhum produto no período.</p>'}</div>
-    </div>`;
+      <div class="card"><strong>Top serviços</strong>${topItems(topServices,'serviço')}</div>
+      <div class="card"><strong>Top produtos</strong>${topItems(topProducts,'produto')}</div>
+    </div>`);
 }
 
-function renderTeam(){teamList.innerHTML=db.barbers.map(b=>`<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small">${isShopBarber(b)?'Comissão: 0% — 100% da receita fica para a barbearia':`Comissão: ${b.commission}%`} · ${db.settings.open}–${db.settings.close}</p><div class="actions"><button onclick="openBarber(${b.id})">Editar</button><button class="danger" onclick="delBarber(${b.id})">Excluir</button></div></div>`).join('')}
-function renderServices(){serviceList.innerHTML=db.services.map(s=>`<div class="card"><div class="bar"><strong>${s.name}</strong><span class="money">${money(s.price)}</span></div><p class="small">${s.duration} min</p><div class="actions"><button onclick="openService(${s.id})">Editar</button><button class="danger" onclick="delService(${s.id})">Excluir</button></div></div>`).join('')}
+function renderTeam(){
+  const cards=db.barbers.map(b=>{const card=safeHTML`<div class="card"><div class="bar"><strong>${b.name}</strong><span class="badge">${b.active?'Ativo':'Inativo'}</span></div><p class="small">${isShopBarber(b)?'Comissão: 0% — 100% da receita fica para a barbearia':`Comissão: ${b.commission}%`} · ${db.settings.open}–${db.settings.close}</p><div class="actions"><button data-elevate-action="open-barber">Editar</button><button class="danger" data-elevate-action="delete-barber">Excluir</button></div></div>`;const buttons=card.querySelectorAll('[data-elevate-action]');buttons[0].dataset.id=String(b.id);buttons[1].dataset.id=String(b.id);return card;});setSafeContent(teamList,cards);
+}
+function renderServices(){
+  const cards=db.services.map(s=>{const card=safeHTML`<div class="card"><div class="bar"><strong>${s.name}</strong><span class="money">${money(s.price)}</span></div><p class="small">${s.duration} min</p><div class="actions"><button data-elevate-action="open-service">Editar</button><button class="danger" data-elevate-action="delete-service">Excluir</button></div></div>`;const buttons=card.querySelectorAll('[data-elevate-action]');buttons[0].dataset.id=String(s.id);buttons[1].dataset.id=String(s.id);return card;});setSafeContent(serviceList,cards);
+}
 function lowStockProducts(){return db.products.filter(p=>Number(p.stock||0)<=Number(p.min||0));}
 function renderStockAlert(){
   const el=document.getElementById('stockAlert'); if(!el)return;
   const low=lowStockProducts();
-  if(!low.length){el.innerHTML='';return;}
-  el.innerHTML=`<div class="card" style="border:2px solid #111;background:#fff7f7">
-    <div class="bar"><div><strong>⚠️ Estoque acabando</strong><div class="small">${low.length} produto(s) atingiram o estoque mínimo.</div></div><button onclick="show('products')">Ver estoque</button></div>
-    <div class="small" style="margin-top:10px">${low.map(p=>`<b>${p.name}</b>: ${p.stock} unidade(s) · mínimo ${p.min}`).join(' &nbsp; · &nbsp; ')}</div>
-  </div>`;
+  if(!low.length){el.replaceChildren();return;}
+  setSafeContent(el,safeHTML`<div class="card" style="border:2px solid #111;background:#fff7f7">
+    <div class="bar"><div><strong>⚠️ Estoque acabando</strong><div class="small">${low.length} produto(s) atingiram o estoque mínimo.</div></div><button data-elevate-action="show-products">Ver estoque</button></div>
+    <div class="small" style="margin-top:10px">${low.flatMap((p,i)=>[safeHTML`<b>${p.name}</b>: ${p.stock} unidade(s) · mínimo ${p.min}`,...(i<low.length-1?[safeHTML` &nbsp; · &nbsp;`]:[])])}</div>
+  </div>`);
   if('Notification' in window && Notification.permission==='granted' && low.length) {
     const key='elevate_stock_notice_'+low.map(p=>p.id+':'+p.stock).join('|');
     if(sessionStorage.getItem(key)!=='1'){ new Notification('Elevate Barbershop — Estoque baixo',{body:low.map(p=>`${p.name}: ${p.stock} un.`).join(' · ')}); sessionStorage.setItem(key,'1'); }
@@ -796,7 +900,7 @@ function requestStockNotifications(){
   Notification.requestPermission().then(r=>{ if(r==='granted') alert('✓ Avisos de estoque ativados neste dispositivo.'); else alert('As notificações foram bloqueadas. O aviso continuará no Dashboard.'); renderStockAlert(); });
 }
 
-function renderProducts(){productList.innerHTML=db.products.map(p=>`<tr><td><b>${p.name}</b></td><td>${p.stock}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td><td>${money(p.commission||0)}</td><td><span class="badge">${p.stock<=p.min?'Estoque baixo':'Normal'}</span></td><td><button onclick="openProduct(${p.id})">Editar</button> <button class="danger" onclick="delProduct(${p.id})">Excluir</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto cadastrado ainda.</td></tr>'}
+function renderProducts(){const rows=db.products.map(p=>{const row=safeHTML`<tr><td><b>${p.name}</b></td><td>${p.stock}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td><td>${money(p.commission||0)}</td><td><span class="badge">${p.stock<=p.min?'Estoque baixo':'Normal'}</span></td><td><button data-elevate-action="open-product">Editar</button> <button class="danger" data-elevate-action="delete-product">Excluir</button></td></tr>`;for(const button of row.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(p.id);return row;});setSafeContent(productList,rows.length?rows:safeHTML`<tr><td colspan="7">Nenhum produto cadastrado ainda.</td></tr>`)}
 function dateOnlyAdd(dateStr,days){
   const parts=dateStr.split('-').map(Number);
   const d=new Date(parts[0],parts[1]-1,parts[2]+days,12,0,0);
@@ -901,20 +1005,19 @@ function renderCash(){
     ['tips','Caixinhas',money(p.tips)],
     ['entries','Lançamentos',p.es.length]
   ];
-  document.getElementById('cashStats').innerHTML=cards.map(x=>'<button type="button" class="card cash-filter-card '+(cashFilter===x[0]?'selected':'')+'" onclick="setCashFilter(\''+x[0]+'\')" style="text-align:left;width:100%"><div class="label">'+x[1]+'</div><div class="value">'+x[2]+'</div></button>').join('');
+  const cashStatCards=cards.map(x=>{const button=safeHTML`<button type="button" class="card cash-filter-card" data-elevate-action="cash-filter" style="text-align:left;width:100%"><div class="label">${x[1]}</div><div class="value">${x[2]}</div></button>`;button.classList.toggle('selected',cashFilter===x[0]);button.dataset.filter=x[0];return button;});
+  setSafeContent(document.getElementById('cashStats'),cashStatCards);
   let es=p.es.slice();
   if(cashFilter==='services') es=es.filter(cashHasServices);
   else if(cashFilter==='products') es=es.filter(cashHasProducts);
   else if(cashFilter==='tips') es=es.filter(cashHasTip);
   es.sort((a,b)=>((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')));
   const filterLabel={all:'Faturamento · todos os lançamentos',services:'Serviços · lançamentos que têm serviço',products:'Produtos · lançamentos que têm produto',tips:'Caixinhas · lançamentos com gorjeta',entries:'Todos os lançamentos'}[cashFilter]||'Todos os lançamentos';
-  const rows=es.map(e=>{
-    const st=entryServiceTotal(e), pt=entryProductTotal(e), tip=Number(e.tip||0);
-    const servicePay=st>0?(e.servicePayment||e.payment||'—'):'—';
-    const productPay=pt>0?(e.productPayment||e.productPay||'—'):'—';
-    return '<tr><td>'+e.date+' '+e.time+'</td><td>'+barberName(e.barber)+'</td><td>'+(e.service||'—')+'</td><td>'+(e.productName||'—')+'</td><td>'+servicePay+'</td><td>'+productPay+'</td><td>'+money(tip)+'</td><td>'+(tip?(e.tipPayment||'Cash'):'—')+'</td><td><b>'+money(st+pt)+'</b></td><td><button onclick="openEntry('+e.id+')">Editar</button> <button class="danger" onclick="delEntry('+e.id+')">Excluir</button></td></tr>';
-  }).join('');
-  document.getElementById('entryList').innerHTML='<tr><td colspan="10" style="background:#f7f7f7"><b>'+filterLabel+'</b> · '+es.length+' lançamento(s) · período '+from+' → '+to+'</td></tr>'+rows;
+  const entryRows=es.map(e=>{
+    const st=entryServiceTotal(e),pt=entryProductTotal(e),tip=Number(e.tip||0),servicePay=st>0?(e.servicePayment||e.payment||'—'):'—',productPay=pt>0?(e.productPayment||e.productPay||'—'):'—';
+    const row=safeHTML`<tr><td>${e.date} ${e.time}</td><td>${barberName(e.barber)}</td><td>${e.service||'—'}</td><td>${e.productName||'—'}</td><td>${servicePay}</td><td>${productPay}</td><td>${money(tip)}</td><td>${tip?(e.tipPayment||'Cash'):'—'}</td><td><b>${money(st+pt)}</b></td><td><button data-elevate-action="open-entry">Editar</button> <button class="danger" data-elevate-action="delete-entry">Excluir</button></td></tr>`;for(const button of row.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(e.id);return row;
+  });
+  setSafeContent(document.getElementById('entryList'),[safeHTML`<tr><td colspan="10" style="background:#f7f7f7"><b>${filterLabel}</b> · ${es.length} lançamento(s) · período ${from} → ${to}</td></tr>`,...entryRows]);
 }
 let commissionPeriod='today';
 function commissionDateRange(type){
@@ -961,17 +1064,17 @@ function renderCommissions(){
   });
   const totalCommissions=map.reduce((sum,[b,es,sr,pr,t,sc,pc])=>sum+(isShopBarber(b)?0:sc+pc),0);
   const totalEl=document.getElementById('commTotalValue'); if(totalEl) totalEl.textContent=money(totalCommissions);
-  commList.innerHTML=map.map(([b,es,sr,pr,t,sc,pc])=>`<tr><td>${b.name}</td><td>${es.length}</td><td>${money(sr)}</td><td>${money(pr)}</td><td>${money(t)}</td><td>${money(sc)} (${isShopBarber(b)?'0% — barbearia':b.commission+'%'})</td><td>${money(pc)}</td><td><b>${money(sc+pc)}</b></td></tr>`).join('');
+  setSafeContent(commList,map.map(([b,es,sr,pr,t,sc,pc])=>safeHTML`<tr><td>${b.name}</td><td>${es.length}</td><td>${money(sr)}</td><td>${money(pr)}</td><td>${money(t)}</td><td>${money(sc)} (${isShopBarber(b)?'0% — barbearia':b.commission+'%'})</td><td>${money(pc)}</td><td><b>${money(sc+pc)}</b></td></tr>`));
 }
 function renderSettings(){setName.value=db.settings.name;setCurrency.value=db.settings.currency;setCommission.value=db.settings.commission;setOpen.value=db.settings.open;setClose.value=db.settings.close}
-function openModal(title,body){modalTitle.textContent=title;modalBody.innerHTML=body;modal.classList.add('open')}function closeModal(){modal.classList.remove('open')}
-function openBarber(id){let b=db.barbers.find(x=>x.id==id)||{id:null,name:'',commission:db.settings.commission,active:true};let shop=isShopBarber(b);openModal(id?'Editar barbeiro':'Novo barbeiro',`<label>Nome</label><input id="fName" value="${b.name}"><label>Comissão (%)</label><input id="fComm" type="number" value="${shop?0:b.commission}" ${shop?'disabled':''}><p class="small">${shop?'Este perfil é a própria barbearia. Serviços e produtos ficam 100% para a barbearia.':'Comissão dos serviços deste barbeiro.'}</p><label>Status</label><select id="fActive"><option value="1" ${b.active?'selected':''}>Ativo</option><option value="0" ${!b.active?'selected':''}>Inativo</option></select><br><br><button class="primary" onclick="saveBarber(${id||0})">Salvar</button>`)}
+function openModal(title,body){modalTitle.textContent=title;modalBody.replaceChildren(body);modal.classList.add('open')}function closeModal(){modal.classList.remove('open')}
+function openBarber(id){let b=db.barbers.find(x=>x.id==id)||{id:null,name:'',commission:db.settings.commission,active:true};let shop=isShopBarber(b);const body=safeHTML`<label>Nome</label><input id="fName"><label>Comissão (%)</label><input id="fComm" type="number"><p class="small">${shop?'Este perfil é a própria barbearia. Serviços e produtos ficam 100% para a barbearia.':'Comissão dos serviços deste barbeiro.'}</p><label>Status</label><select id="fActive"><option value="1">Ativo</option><option value="0">Inativo</option></select><br><br><button class="primary" data-elevate-action="edit-save-barber">Salvar</button>`;openModal(id?'Editar barbeiro':'Novo barbeiro',body);fName.value=String(b.name??'');fComm.value=String(shop?0:b.commission??0);fComm.disabled=shop;fActive.value=b.active?'1':'0';modalBody.querySelector('[data-elevate-action]').dataset.id=String(id||0)}
 function saveBarber(id){let name=fName.value.trim();let o={id:id||Date.now(),name,commission:name==='Elevate Barbershop'?0:Number(fComm.value),active:fActive.value==='1'};if(!o.name)return alert('Informe o nome');let i=db.barbers.findIndex(x=>x.id==id);if(i>=0)db.barbers[i]=o;else db.barbers.push(o);closeModal();save()}
 function delBarber(id){if(confirm('Excluir barbeiro?')){db.barbers=db.barbers.filter(x=>x.id!=id);save()}}
-function openService(id){let s=db.services.find(x=>x.id==id)||{id:null,name:'',price:0,duration:30};openModal(id?'Editar serviço':'Novo serviço',`<label>Nome</label><input id="fName" value="${s.name}"><label>Preço</label><input id="fPrice" type="number" step=".01" value="${s.price}"><label>Duração (min)</label><input id="fDur" type="number" value="${s.duration}"><br><br><button class="primary" onclick="saveService(${id||0})">Salvar</button>`)}
+function openService(id){let s=db.services.find(x=>x.id==id)||{id:null,name:'',price:0,duration:30};const body=safeHTML`<label>Nome</label><input id="fName"><label>Preço</label><input id="fPrice" type="number" step=".01"><label>Duração (min)</label><input id="fDur" type="number"><br><br><button class="primary" data-elevate-action="edit-save-service">Salvar</button>`;openModal(id?'Editar serviço':'Novo serviço',body);fName.value=String(s.name??'');fPrice.value=String(s.price??0);fDur.value=String(s.duration??30);modalBody.querySelector('[data-elevate-action]').dataset.id=String(id||0)}
 function saveService(id){let o={id:id||Date.now(),name:fName.value.trim(),price:Number(fPrice.value),duration:Number(fDur.value)};let i=db.services.findIndex(x=>x.id==id);if(i>=0)db.services[i]=o;else db.services.push(o);closeModal();save()}
 function delService(id){if(confirm('Excluir serviço?')){db.services=db.services.filter(x=>x.id!=id);save()}}
-function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',stock:0,cost:0,price:0,min:2,commission:0};openModal(id?'Editar produto':'Novo produto',`<div class="formgrid"><div><label>Produto</label><input id="fName" value="${p.name}"></div><div><label>Estoque</label><input id="fStock" type="number" value="${p.stock}"></div><div><label>Custo</label><input id="fCost" type="number" step=".01" value="${p.cost}"></div><div><label>Preço de venda</label><input id="fPrice" type="number" step=".01" value="${p.price}"></div><div><label>Comissão do barbeiro por unidade (€)</label><input id="fProdComm" type="number" min="0" step=".01" value="${p.commission||0}"></div><div><label>Estoque mínimo</label><input id="fMin" type="number" value="${p.min}"></div></div><br><button class="primary" onclick="saveProduct(${id||0})">Salvar</button>`)}
+function openProduct(id){let p=db.products.find(x=>x.id==id)||{id:null,name:'',stock:0,cost:0,price:0,min:2,commission:0};const body=safeHTML`<div class="formgrid"><div><label>Produto</label><input id="fName"></div><div><label>Estoque</label><input id="fStock" type="number"></div><div><label>Custo</label><input id="fCost" type="number" step=".01"></div><div><label>Preço de venda</label><input id="fPrice" type="number" step=".01"></div><div><label>Comissão do barbeiro por unidade (€)</label><input id="fProdComm" type="number" min="0" step=".01"></div><div><label>Estoque mínimo</label><input id="fMin" type="number"></div></div><br><button class="primary" data-elevate-action="edit-save-product">Salvar</button>`;openModal(id?'Editar produto':'Novo produto',body);fName.value=String(p.name??'');fStock.value=String(p.stock??0);fCost.value=String(p.cost??0);fPrice.value=String(p.price??0);fProdComm.value=String(p.commission||0);fMin.value=String(p.min??2);modalBody.querySelector('[data-elevate-action]').dataset.id=String(id||0)}
 function saveProduct(id){let o={id:id||Date.now(),name:fName.value.trim(),stock:Number(fStock.value),cost:Number(fCost.value),price:Number(fPrice.value),min:Number(fMin.value),commission:Number(fProdComm.value||0)};let i=db.products.findIndex(x=>x.id==id);if(i>=0)db.products[i]=o;else db.products.push(o);closeModal();save()}
 function delProduct(id){if(confirm('Excluir produto?')){db.products=db.products.filter(x=>x.id!=id);save()}}
 let entryEditState=null;
@@ -988,58 +1091,49 @@ function openEntry(id){
     services:getServiceItems(e).map(x=>({id:x.id||null,qty:Number(x.qty||1),unitPrice:Number(x.unitPrice||0)})),
     products:getProductItems(e).map(x=>({id:x.id||null,qty:Number(x.qty||1),unitPrice:Number(x.unitPrice||0),commission:Number(x.commission||0)}))
   };
-  openModal(id?'Editar lançamento':'Novo lançamento',`
+  const body=safeHTML`
     <div class="formgrid">
-      <div><label>Data</label><input id="fDate" type="date" value="${entryEditState.date}"></div>
-      <div><label>Hora</label><input id="fTime" type="time" value="${entryEditState.time}"></div>
-      <div><label>Barbeiro</label><select id="fBarber" onchange="updateEntryEditPreview()">${db.barbers.map(b=>`<option value="${b.id}" ${String(b.id)===String(entryEditState.barber)?'selected':''}>${b.name}</option>`).join('')}</select></div>
-      <div><label>Clientes</label><input id="fClients" type="number" min="0" step="1" value="${entryEditState.clients}" oninput="updateEntryEditPreview()"></div>
+      <div><label>Data</label><input id="fDate" type="date" data-entry-edit-input></div>
+      <div><label>Hora</label><input id="fTime" type="time" data-entry-edit-input></div>
+      <div><label>Barbeiro</label><select id="fBarber" data-entry-edit-select="barber"></select></div>
+      <div><label>Clientes</label><input id="fClients" type="number" min="0" step="1" data-entry-edit-input></div>
     </div>
     <div class="card" style="margin-top:14px">
-      <div class="bar"><strong>Serviços</strong><button type="button" onclick="addEditServiceRow()">+ Adicionar serviço</button></div>
+      <div class="bar"><strong>Serviços</strong><button type="button" data-elevate-action="edit-add-service">+ Adicionar serviço</button></div>
       <div id="editServiceRows" style="margin-top:10px"></div>
       <label>Pagamento dos serviços</label>
-      <select id="fPay" onchange="updateEntryEditPreview()">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===entryEditState.servicePayment?'selected':''}>${x}</option>`).join('')}</select>
+      <select id="fPay" data-entry-edit-select="payment"></select>
     </div>
     <div class="card" style="margin-top:14px">
-      <div class="bar"><strong>Produtos</strong><button type="button" onclick="addEditProductRow()">+ Adicionar produto</button></div>
+      <div class="bar"><strong>Produtos</strong><button type="button" data-elevate-action="edit-add-product">+ Adicionar produto</button></div>
       <div id="editProductRows" style="margin-top:10px"></div>
       <label>Pagamento dos produtos</label>
-      <select id="fProductPay" onchange="updateEntryEditPreview()">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===entryEditState.productPayment?'selected':''}>${x}</option>`).join('')}</select>
+      <select id="fProductPay" data-entry-edit-select="payment"></select>
     </div>
     <div class="card" style="margin-top:14px">
       <label>Gorjeta / Caixinha (€)</label>
-      <input id="fTip" type="number" min="0" step=".01" value="${entryEditState.tip.toFixed(2)}" oninput="updateEntryEditPreview()">
+      <input id="fTip" type="number" min="0" step=".01" data-entry-edit-input>
       <label>Pagamento da caixinha</label>
-      <select id="fTipPay" onchange="updateEntryEditPreview()">${['Cash','Revolut','SumUp'].map(x=>`<option ${x===entryEditState.tipPayment?'selected':''}>${x}</option>`).join('')}</select>
+      <select id="fTipPay" data-entry-edit-select="payment"></select>
     </div>
     <div id="editTotalPreview" class="card" style="margin-top:14px;background:#f8f8f8"></div>
     <div class="small" style="margin-top:10px">Você pode editar vários serviços e vários produtos no mesmo lançamento. O preço do catálogo é preenchido automaticamente quando você troca o item, mas o valor desta venda continua editável.</div>
-    <br><div class="actions" style="flex-direction:column"><button class="primary" style="width:100%" onclick="saveEntry(${id||0})">Salvar alterações</button>${id?`<button type="button" class="danger" style="width:100%;border-color:#b42318" onclick="closeModal();delEntry(${id})">Excluir lançamento inteiro</button>`:""}</div>`
-  );
+    <br><div class="actions" style="flex-direction:column"><button class="primary" style="width:100%" data-elevate-action="edit-save-entry">Salvar alterações</button>${id?safeHTML`<button type="button" class="danger" style="width:100%;border-color:#b42318" data-elevate-action="edit-delete-entry">Excluir lançamento inteiro</button>`:''}</div>`;
+  openModal(id?'Editar lançamento':'Novo lançamento',body);
+  fDate.value=entryEditState.date;fTime.value=entryEditState.time;fClients.value=String(entryEditState.clients);fTip.value=entryEditState.tip.toFixed(2);
+  fBarber.replaceChildren(...db.barbers.map(b=>new Option(String(b.name??''),String(b.id),false,String(b.id)===String(entryEditState.barber))));
+  const payments=['Cash','Revolut','SumUp'];
+  fPay.replaceChildren(...payments.map(x=>new Option(x,x,false,x===entryEditState.servicePayment)));
+  fProductPay.replaceChildren(...payments.map(x=>new Option(x,x,false,x===entryEditState.productPayment)));
+  fTipPay.replaceChildren(...payments.map(x=>new Option(x,x,false,x===entryEditState.tipPayment)));
+  for(const button of modalBody.querySelectorAll('[data-elevate-action="edit-save-entry"],[data-elevate-action="edit-delete-entry"]'))button.dataset.id=String(id||0);
   renderEntryEditRows();
   updateEntryEditPreview();
 }
 function renderEntryEditRows(){
   const sr=document.getElementById('editServiceRows'), pr=document.getElementById('editProductRows');
-  if(sr) sr.innerHTML=entryEditState.services.length?entryEditState.services.map((x,i)=>`
-    <div class="card" style="margin-bottom:8px;padding:12px">
-      <div class="formgrid">
-        <div><label>Serviço</label><select id="editServiceId${i}" onchange="editServiceRowChanged(${i})"><option value="">Nenhum</option>${db.services.map(s=>`<option value="${s.id}" ${String(s.id)===String(x.id)?'selected':''}>${s.name} — ${money(s.price)}</option>`).join('')}</select></div>
-        <div><label>Quantidade</label><input id="editServiceQty${i}" type="number" min="1" step="1" value="${Math.max(1,x.qty||1)}" oninput="updateEntryEditPreview()"></div>
-        <div><label>Valor unitário (€)</label><input id="editServiceValue${i}" type="number" min="0" step=".01" value="${Number(x.unitPrice||0).toFixed(2)}" oninput="updateEntryEditPreview()"></div>
-        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditServiceRow(${i})">Excluir serviço</button></div>
-      </div>
-    </div>`).join(''):'<div class="small">Nenhum serviço neste lançamento.</div>';
-  if(pr) pr.innerHTML=entryEditState.products.length?entryEditState.products.map((x,i)=>`
-    <div class="card" style="margin-bottom:8px;padding:12px">
-      <div class="formgrid">
-        <div><label>Produto</label><select id="editProductId${i}" onchange="editProductRowChanged(${i})"><option value="">Nenhum</option>${db.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(x.id)?'selected':''}>${p.name} — ${money(p.price)}</option>`).join('')}</select></div>
-        <div><label>Quantidade</label><input id="editProductQty${i}" type="number" min="1" step="1" value="${Math.max(1,x.qty||1)}" oninput="updateEntryEditPreview()"></div>
-        <div><label>Valor unitário (€)</label><input id="editProductValue${i}" type="number" min="0" step=".01" value="${Number(x.unitPrice||0).toFixed(2)}" oninput="updateEntryEditPreview()"></div>
-        <div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" onclick="removeEditProductRow(${i})">Excluir produto</button></div>
-      </div>
-    </div>`).join(''):'<div class="small">Nenhum produto neste lançamento.</div>';
+  if(sr){const rows=entryEditState.services.map((x,i)=>{const row=safeHTML`<div class="card" style="margin-bottom:8px;padding:12px"><div class="formgrid"><div><label>Serviço</label><select data-entry-edit-select="service"><option value="">Nenhum</option></select></div><div><label>Quantidade</label><input data-entry-edit-input type="number" min="1" step="1"></div><div><label>Valor unitário (€)</label><input data-entry-edit-input type="number" min="0" step=".01"></div><div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" data-elevate-action="edit-remove-service">Excluir serviço</button></div></div></div>`;const select=row.querySelector('select'),inputs=row.querySelectorAll('input'),button=row.querySelector('button');select.id='editServiceId'+i;select.dataset.index=String(i);select.replaceChildren(new Option('Nenhum',''),...db.services.map(s=>new Option(String(s.name??'')+' — '+money(s.price),String(s.id),false,String(s.id)===String(x.id))));inputs[0].id='editServiceQty'+i;inputs[0].value=String(Math.max(1,x.qty||1));inputs[1].id='editServiceValue'+i;inputs[1].value=Number(x.unitPrice||0).toFixed(2);button.dataset.index=String(i);return row;});setSafeContent(sr,rows.length?rows:safeHTML`<div class="small">Nenhum serviço neste lançamento.</div>`)}
+  if(pr){const rows=entryEditState.products.map((x,i)=>{const row=safeHTML`<div class="card" style="margin-bottom:8px;padding:12px"><div class="formgrid"><div><label>Produto</label><select data-entry-edit-select="product"><option value="">Nenhum</option></select></div><div><label>Quantidade</label><input data-entry-edit-input type="number" min="1" step="1"></div><div><label>Valor unitário (€)</label><input data-entry-edit-input type="number" min="0" step=".01"></div><div style="display:flex;align-items:end"><button type="button" class="danger" style="width:100%" data-elevate-action="edit-remove-product">Excluir produto</button></div></div></div>`;const select=row.querySelector('select'),inputs=row.querySelectorAll('input'),button=row.querySelector('button');select.id='editProductId'+i;select.dataset.index=String(i);select.replaceChildren(new Option('Nenhum',''),...db.products.map(p=>new Option(String(p.name??'')+' — '+money(p.price),String(p.id),false,String(p.id)===String(x.id))));inputs[0].id='editProductQty'+i;inputs[0].value=String(Math.max(1,x.qty||1));inputs[1].id='editProductValue'+i;inputs[1].value=Number(x.unitPrice||0).toFixed(2);button.dataset.index=String(i);return row;});setSafeContent(pr,rows.length?rows:safeHTML`<div class="small">Nenhum produto neste lançamento.</div>`)}
 }
 function addEditServiceRow(){
   entryEditState.services.push({id:null,qty:1,unitPrice:0});
@@ -1098,12 +1192,12 @@ function updateEntryEditPreview(){
   const tip=Math.max(0,Number(get('fTip')?.value||0));
   const clients=Math.max(0,Math.floor(Number(get('fClients')?.value||0)));
   const el=get('editTotalPreview');
-  if(el) el.innerHTML=`<b>Resumo do lançamento</b>
+  if(el) setSafeContent(el,safeHTML`<b>Resumo do lançamento</b>
     <div class="small">Serviços: ${rows.services.length?rows.services.map(x=>{const s=db.services.find(a=>a.id===x.id);return `${x.qty}× ${s?.name||'Serviço'} — ${money(x.qty*x.unitPrice)}`}).join(' · '):'Nenhum'}</div>
     <div class="small">Clientes: ${clients}</div>
     <div class="small">Produtos: ${rows.products.length?rows.products.map(x=>{const p=db.products.find(a=>a.id===x.id);return `${x.qty}× ${p?.name||'Produto'} — ${money(x.qty*x.unitPrice)}`}).join(' · '):'Nenhum'}</div>
     <div class="small">Caixinha: ${money(tip)}</div>
-    <div style="margin-top:6px"><b>Total: ${money(st+pt)}</b></div>`;
+    <div style="margin-top:6px"><b>Total: ${money(st+pt)}</b></div>`);
 }
 function editServiceChanged(){updateEntryEditPreview()}
 function editProductChanged(){updateEntryEditPreview()}
@@ -1221,9 +1315,9 @@ function renderIpadToday(){
   const entries=db.entries.filter(e=>e.date===today);
   const total=entries.reduce((s,e)=>s+entryTotal(e),0), tips=entries.reduce((s,e)=>s+Number(e.tip||0),0), clients=entries.reduce((s,e)=>s+entryClients(e),0);
   ipadTodayTotal.textContent=`${entries.length} lançamentos · ${clients} clientes · ${money(total)} serviços/produtos · ${money(tips)} caixinhas`;
-  if(!entries.length){ipadTodayEntries.innerHTML='<div class="small">Nenhum lançamento hoje.</div>';return}
+  if(!entries.length){setSafeContent(ipadTodayEntries,safeHTML`<div class="small">Nenhum lançamento hoje.</div>`);return}
   const grouped=db.barbers.map(b=>[b,entries.filter(e=>e.barber==b.id)]).filter(x=>x[1].length);
-  ipadTodayEntries.innerHTML=grouped.map(([b,es])=>{
+  setSafeContent(ipadTodayEntries,grouped.map(([b,es])=>{
     const serviceTotal=es.reduce((s,e)=>s+entryServiceTotal(e),0), productTotal=es.reduce((s,e)=>s+entryProductTotal(e),0), tipTotal=es.reduce((s,e)=>s+Number(e.tip||0),0);
     const cashS=es.filter(e=>(e.servicePayment||e.payment)==='Cash').reduce((s,e)=>s+entryServiceTotal(e),0);
     const revS=es.filter(e=>(e.servicePayment||e.payment)==='Revolut').reduce((s,e)=>s+entryServiceTotal(e),0);
@@ -1231,7 +1325,7 @@ function renderIpadToday(){
     const cashP=es.filter(e=>e.productPayment==='Cash').reduce((s,e)=>s+entryProductTotal(e),0);
     const revP=es.filter(e=>e.productPayment==='Revolut').reduce((s,e)=>s+entryProductTotal(e),0);
     const sumP=es.filter(e=>e.productPayment==='SumUp').reduce((s,e)=>s+entryProductTotal(e),0);
-    return `<div class="card" style="margin-top:12px">
+    return safeHTML`<div class="card" style="margin-top:12px">
       <div class="bar"><div><strong>${b.name}</strong><div class="small">${es.length} lançamento(s) · ${es.reduce((a,e)=>a+entryClients(e),0)} cliente(s)</div></div><strong>${money(serviceTotal+productTotal)}</strong></div>
       <div class="grid stats" style="margin:12px 0 8px">
         <div><span class="small">Serviços</span><br><b>${money(serviceTotal)}</b></div>
@@ -1241,13 +1335,9 @@ function renderIpadToday(){
         <div><span class="small">Pagamentos produtos</span><br><b>Cash ${money(cashP)} · Rev ${money(revP)} · SumUp ${money(sumP)}</b></div>
       </div>
       <table><thead><tr><th>Hora</th><th>Serviços</th><th>Produtos</th><th>Pag. serviços</th><th>Pag. produtos</th><th>Caixinha</th><th>Pag. caixinha</th><th>Total</th></tr></thead>
-      <tbody>${es.slice().sort((a,b)=>b.time.localeCompare(a.time)).map(e=>{
-        const si=getServiceItems(e).map(x=>`${x.qty||1}× ${x.name} (${money(x.unitPrice)})`).join('<br>')||'—';
-        const pi=getProductItems(e).map(x=>`${x.qty||1}× ${x.name} (${money(x.unitPrice)})`).join('<br>')||'—';
-        return `<tr><td><b>${e.time}</b></td><td>${si}</td><td>${pi}</td><td>${e.servicePayment||e.payment||'—'}</td><td>${e.productPayment||'—'}</td><td>${money(e.tip||0)}</td><td>${e.tip?e.tipPayment||'Cash':'—'}</td><td><b>${money(entryTotal(e))}</b></td></tr>`;
-      }).join('')}</tbody></table>
+      <tbody>${es.slice().sort((a,b)=>b.time.localeCompare(a.time)).map(e=>safeHTML`<tr><td><b>${e.time}</b></td><td>${getServiceItems(e).length?getServiceItems(e).flatMap((x,i)=>[`${x.qty||1}× ${x.name} (${money(x.unitPrice)})`,...(i<getServiceItems(e).length-1?[safeHTML`<br>`]:[])]):'—'}</td><td>${getProductItems(e).length?getProductItems(e).flatMap((x,i)=>[`${x.qty||1}× ${x.name} (${money(x.unitPrice)})`,...(i<getProductItems(e).length-1?[safeHTML`<br>`]:[])]):'—'}</td><td>${e.servicePayment||e.payment||'—'}</td><td>${e.productPayment||'—'}</td><td>${money(e.tip||0)}</td><td>${e.tip?e.tipPayment||'Cash':'—'}</td><td><b>${money(entryTotal(e))}</b></td></tr>`)}</tbody></table>
     </div>`
-  }).join('');
+  }));
 }
 function serviceUnitCount(){return Object.values(ipadState.serviceItems||{}).reduce((a,q)=>a+Number(q||0),0)}
 function renderIpadClients(){
@@ -1255,20 +1345,20 @@ function renderIpadClients(){
   const max=serviceUnitCount();
   if(max<=0){
     ipadState.clients=0;
-    el.innerHTML='<div class="small">Venda somente de produto: não contabiliza cliente.</div>';
+    setSafeContent(el,safeHTML`<div class="small">Venda somente de produto: não contabiliza cliente.</div>`);
     return;
   }
   if((ipadState.clients||1)>max || Number(ipadState.clients||0)<=0) ipadState.clients=1;
-  el.innerHTML=Array.from({length:max},(_,i)=>i+1).map(n=>`<button class="card select-card ${ipadState.clients===n?'selected':''}" style="text-align:left;min-height:78px" onclick="ipadChooseClients(${n})"><strong>${n} ${n===1?'cliente':'clientes'}</strong><div class="small">${n===1?'1 pessoa':'pessoas'}</div></button>`).join('');
+  const buttons=Array.from({length:max},(_,i)=>{const n=i+1,button=safeHTML`<button class="card select-card" style="text-align:left;min-height:78px" data-elevate-action="ipad-choose-clients"><strong>${n} ${n===1?'cliente':'clientes'}</strong><div class="small">${n===1?'1 pessoa':'pessoas'}</div></button>`;button.classList.toggle('selected',ipadState.clients===n);button.dataset.index=String(n);return button;});setSafeContent(el,buttons);
 }
 function ipadChooseClients(n){ipadState.clients=Number(n);renderIpadClients();ipadUpdate()}
 function renderIpad(){
   renderIpadToday();
   renderIpadClients();
-  ipadBarbers.innerHTML=db.barbers.filter(b=>b.active).map(b=>`<button class="card" style="text-align:left;min-height:100px;font-size:18px" onclick="ipadChooseBarber(${b.id})"><div style="font-size:26px">👤</div><strong>${b.name}</strong><div class="small">Toque para começar</div></button>`).join('');
-  ipadServices.innerHTML=db.services.map(s=>{let q=ipadState.serviceItems[s.id]||0;return `<div class="card select-card ${q?'selected':''}" style="text-align:left;min-height:88px;position:relative;cursor:pointer" onclick="ipadChooseService(${s.id})"><strong>${s.name}</strong><div class="money" style="margin-top:8px">${money(s.price)}</div><div class="small">${s.duration} min ${q?`· <b>Quantidade: ${q}</b>`:''}</div>${q?`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadRemoveService(${s.id})">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadChooseService(${s.id})">+</button></div>`:''}</div>`}).join('');
+  setSafeContent(ipadBarbers,db.barbers.filter(b=>b.active).map(b=>{const button=safeHTML`<button class="card" style="text-align:left;min-height:100px;font-size:18px" data-elevate-action="ipad-choose-barber"><div style="font-size:26px">👤</div><strong>${b.name}</strong><div class="small">Toque para começar</div></button>`;button.dataset.id=String(b.id);return button;}));
+  setSafeContent(ipadServices,db.services.map(s=>{const q=ipadState.serviceItems[s.id]||0,card=safeHTML`<div class="card select-card" style="text-align:left;min-height:88px;position:relative;cursor:pointer" data-elevate-action="ipad-choose-service"><strong>${s.name}</strong><div class="money" style="margin-top:8px">${money(s.price)}</div><div class="small">${s.duration} min ${q?safeHTML`· <b>Quantidade: ${q}</b>`:''}</div>${q?safeHTML`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" data-elevate-action="ipad-remove-service">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" data-elevate-action="ipad-choose-service">+</button></div>`:''}</div>`;card.classList.toggle('selected',!!q);for(const button of card.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(s.id);return card;}));
   const available=db.products.filter(p=>p.stock>0);
-  ipadProducts.innerHTML=available.length?available.map(p=>{let q=ipadState.productItems[p.id]||0;return `<div class="card select-card ${q?'selected':''}" style="text-align:left;min-height:75px;position:relative;cursor:pointer" onclick="ipadChooseProduct(${p.id})"><strong>${p.name}</strong><div class="small">${money(p.price)} · estoque ${p.stock}${q?` · <b>Quantidade: ${q}</b>`:''}</div>${q?`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadRemoveProduct(${p.id})">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" onclick="event.stopPropagation();ipadChooseProduct(${p.id})">+</button></div>`:''}</div>`}).join(''):'<div class="small">Nenhum produto disponível cadastrado.</div>';
+  setSafeContent(ipadProducts,available.length?available.map(p=>{let q=ipadState.productItems[p.id]||0;const card=safeHTML`<div class="card select-card" style="text-align:left;min-height:75px;position:relative;cursor:pointer" data-elevate-action="ipad-choose-product"><strong>${p.name}</strong><div class="small">${money(p.price)} · estoque ${p.stock}${q?safeHTML` · <b>Quantidade: ${q}</b>`:''}</div>${q?safeHTML`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" data-elevate-action="ipad-remove-product">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" data-elevate-action="ipad-choose-product">+</button></div>`:''}</div>`;card.classList.toggle('selected',!!q);for(const button of card.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(p.id);return card;}):safeHTML`<div class="small">Nenhum produto disponível cadastrado.</div>`);
   ipadUpdate();
 }
 function ipadChooseBarber(id){ipadState={barber:id,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null};ipadStep1.style.display='none';ipadStep2.style.display='block';ipadBarberName.textContent=barberName(id);renderIpad()}
@@ -1287,7 +1377,7 @@ function ipadUpdate(){
  const services=Object.entries(ipadState.serviceItems).filter(([,q])=>q>0).map(([id,q])=>{let s=db.services.find(x=>x.id==id);return s?{...s,qty:q}:null}).filter(Boolean);
  const products=Object.entries(ipadState.productItems).filter(([,q])=>q>0).map(([id,q])=>{let p=db.products.find(x=>x.id==id);return p?{...p,qty:q}:null}).filter(Boolean);
  const st=services.reduce((a,x)=>a+x.qty*x.price,0),pt=products.reduce((a,x)=>a+x.qty*x.price,0);
- ipadSelected.innerHTML=`<strong>Resumo do lançamento</strong>
+ setSafeContent(ipadSelected,safeHTML`<strong>Resumo do lançamento</strong>
  <div class="small" style="margin-top:8px"><b>Serviços:</b> ${services.length?services.map(x=>`${x.qty}× ${x.name} — ${money(x.qty*x.price)}`).join(' · '):'Nenhum'}</div>
  <div class="small"><b>Clientes:</b> ${ipadState.clients||1}</div>
  <div class="small"><b>Produtos:</b> ${products.length?products.map(x=>`${x.qty}× ${x.name} — ${money(x.qty*x.price)}`).join(' · '):'Nenhum'}</div>
@@ -1295,7 +1385,7 @@ function ipadUpdate(){
  <div class="small"><b>Pagamento produtos:</b> ${pt?ipadState.productPayment||'Escolha':'Não aplicável'}</div>
  <div class="small"><b>Caixinha:</b> ${money(Number(ipadTip.value||0))} · ${Number(ipadTip.value||0)?(ipadState.tipPayment||'Escolha'):'Sem gorjeta'}</div>
  <div class="small"><b>Pagamento caixinha:</b> ${Number(ipadTip.value||0)?(ipadState.tipPayment||'Escolha'):'—'}</div>
- <div style="margin-top:8px"><b>Total: ${money(st+pt)}</b></div>`;
+ <div style="margin-top:8px"><b>Total: ${money(st+pt)}</b></div>`);
 }
 function ipadBack(){ipadState={barber:null,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null,clients:1};ipadStep2.style.display='none';ipadStep1.style.display='block';renderIpad()}
 async function ipadSave(){
