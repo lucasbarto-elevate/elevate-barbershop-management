@@ -555,6 +555,13 @@ function safeHTML(strings,...values){
   return template.content;
 }
 function setSafeContent(target,content){const fragment=document.createDocumentFragment();appendSafeHTMLValue(fragment,content);target.replaceChildren(fragment);}
+function safeHTMLSingleElement(strings,...values){
+  const fragment=safeHTML(strings,...values);
+  if(fragment.childNodes.length!==1||!(fragment.firstChild instanceof Element))throw new TypeError('O template deve produzir exatamente um elemento.');
+  const element=fragment.firstChild;
+  safeHTMLFragments.add(element);
+  return element;
+}
 function optionNodes(items,selectedValue){
   const fragment=document.createDocumentFragment();
   for(const item of items){
@@ -1005,7 +1012,7 @@ function renderCash(){
     ['tips','Caixinhas',money(p.tips)],
     ['entries','Lançamentos',p.es.length]
   ];
-  const cashStatCards=cards.map(x=>{const button=safeHTML`<button type="button" class="card cash-filter-card" data-elevate-action="cash-filter" style="text-align:left;width:100%"><div class="label">${x[1]}</div><div class="value">${x[2]}</div></button>`;button.classList.toggle('selected',cashFilter===x[0]);button.dataset.filter=x[0];return button;});
+  const cashStatCards=cards.map(x=>{const button=safeHTMLSingleElement`<button type="button" class="card cash-filter-card" data-elevate-action="cash-filter" style="text-align:left;width:100%"><div class="label">${x[1]}</div><div class="value">${x[2]}</div></button>`;button.classList.toggle('selected',cashFilter===x[0]);button.dataset.filter=x[0];return button;});
   setSafeContent(document.getElementById('cashStats'),cashStatCards);
   let es=p.es.slice();
   if(cashFilter==='services') es=es.filter(cashHasServices);
@@ -1349,16 +1356,16 @@ function renderIpadClients(){
     return;
   }
   if((ipadState.clients||1)>max || Number(ipadState.clients||0)<=0) ipadState.clients=1;
-  const buttons=Array.from({length:max},(_,i)=>{const n=i+1,button=safeHTML`<button class="card select-card" style="text-align:left;min-height:78px" data-elevate-action="ipad-choose-clients"><strong>${n} ${n===1?'cliente':'clientes'}</strong><div class="small">${n===1?'1 pessoa':'pessoas'}</div></button>`;button.classList.toggle('selected',ipadState.clients===n);button.dataset.index=String(n);return button;});setSafeContent(el,buttons);
+  const buttons=Array.from({length:max},(_,i)=>{const n=i+1,button=safeHTMLSingleElement`<button class="card select-card" style="text-align:left;min-height:78px" data-elevate-action="ipad-choose-clients"><strong>${n} ${n===1?'cliente':'clientes'}</strong><div class="small">${n===1?'1 pessoa':'pessoas'}</div></button>`;button.classList.toggle('selected',ipadState.clients===n);button.dataset.index=String(n);return button;});setSafeContent(el,buttons);
 }
 function ipadChooseClients(n){ipadState.clients=Number(n);renderIpadClients();ipadUpdate()}
 function renderIpad(){
   renderIpadToday();
   renderIpadClients();
-  setSafeContent(ipadBarbers,db.barbers.filter(b=>b.active).map(b=>{const button=safeHTML`<button class="card" style="text-align:left;min-height:100px;font-size:18px" data-elevate-action="ipad-choose-barber"><div style="font-size:26px">👤</div><strong>${b.name}</strong><div class="small">Toque para começar</div></button>`;button.dataset.id=String(b.id);return button;}));
-  setSafeContent(ipadServices,db.services.map(s=>{const q=ipadState.serviceItems[s.id]||0,card=safeHTML`<div class="card select-card" style="text-align:left;min-height:88px;position:relative;cursor:pointer" data-elevate-action="ipad-choose-service"><strong>${s.name}</strong><div class="money" style="margin-top:8px">${money(s.price)}</div><div class="small">${s.duration} min ${q?safeHTML`· <b>Quantidade: ${q}</b>`:''}</div>${q?safeHTML`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" data-elevate-action="ipad-remove-service">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" data-elevate-action="ipad-choose-service">+</button></div>`:''}</div>`;card.classList.toggle('selected',!!q);for(const button of card.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(s.id);return card;}));
+  setSafeContent(ipadBarbers,db.barbers.filter(b=>b.active).map(b=>{const button=safeHTMLSingleElement`<button class="card" style="text-align:left;min-height:100px;font-size:18px" data-elevate-action="ipad-choose-barber"><div style="font-size:26px">👤</div><strong>${b.name}</strong><div class="small">Toque para começar</div></button>`;button.dataset.id=String(b.id);return button;}));
+  setSafeContent(ipadServices,db.services.map(s=>{const q=ipadState.serviceItems[s.id]||0,card=safeHTMLSingleElement`<div class="card select-card" style="text-align:left;min-height:88px;position:relative;cursor:pointer" data-elevate-action="ipad-choose-service"><strong>${s.name}</strong><div class="money" style="margin-top:8px">${money(s.price)}</div><div class="small">${s.duration} min ${q?safeHTML`· <b>Quantidade: ${q}</b>`:''}</div>${q?safeHTML`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" data-elevate-action="ipad-remove-service">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" data-elevate-action="ipad-choose-service">+</button></div>`:''}</div>`;card.classList.toggle('selected',!!q);for(const button of card.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(s.id);return card;}));
   const available=db.products.filter(p=>p.stock>0);
-  setSafeContent(ipadProducts,available.length?available.map(p=>{let q=ipadState.productItems[p.id]||0;const card=safeHTML`<div class="card select-card" style="text-align:left;min-height:75px;position:relative;cursor:pointer" data-elevate-action="ipad-choose-product"><strong>${p.name}</strong><div class="small">${money(p.price)} · estoque ${p.stock}${q?safeHTML` · <b>Quantidade: ${q}</b>`:''}</div>${q?safeHTML`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" data-elevate-action="ipad-remove-product">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" data-elevate-action="ipad-choose-product">+</button></div>`:''}</div>`;card.classList.toggle('selected',!!q);for(const button of card.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(p.id);return card;}):safeHTML`<div class="small">Nenhum produto disponível cadastrado.</div>`);
+  setSafeContent(ipadProducts,available.length?available.map(p=>{let q=ipadState.productItems[p.id]||0;const card=safeHTMLSingleElement`<div class="card select-card" style="text-align:left;min-height:75px;position:relative;cursor:pointer" data-elevate-action="ipad-choose-product"><strong>${p.name}</strong><div class="small">${money(p.price)} · estoque ${p.stock}${q?safeHTML` · <b>Quantidade: ${q}</b>`:''}</div>${q?safeHTML`<div style="display:flex;align-items:center;gap:8px;margin-top:10px"><button type="button" class="qty-btn" data-elevate-action="ipad-remove-product">−</button><span style="font-weight:800;min-width:30px;text-align:center">${q}</span><button type="button" class="qty-btn" data-elevate-action="ipad-choose-product">+</button></div>`:''}</div>`;card.classList.toggle('selected',!!q);for(const button of card.querySelectorAll('[data-elevate-action]'))button.dataset.id=String(p.id);return card;}):safeHTML`<div class="small">Nenhum produto disponível cadastrado.</div>`);
   ipadUpdate();
 }
 function ipadChooseBarber(id){ipadState={barber:id,serviceItems:{},productItems:{},payment:null,productPayment:null,tipPayment:null};ipadStep1.style.display='none';ipadStep2.style.display='block';ipadBarberName.textContent=barberName(id);renderIpad()}

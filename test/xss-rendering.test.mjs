@@ -39,6 +39,52 @@ test('dynamic rendering has no HTML sinks beyond the static-template parser', ()
   assert.match(html, /parent\.append\(document\.createTextNode\(String\(value\)\)\)/);
 });
 
+test('single-element templates return safe elements for DOM properties and insertion', () => {
+  const inserted = [];
+  class TestNode {}
+  class TestElement extends TestNode {
+    constructor() {
+      super();
+      this.dataset = {};
+      this.classList = { toggle: (name, active) => { this.toggled = [name, active]; } };
+    }
+  }
+  const element = new TestElement();
+  const fragment = { childNodes: [element], firstChild: element };
+  const context = vm.createContext({
+    Node: TestNode,
+    Element: TestElement,
+    safeHTMLFragments: new WeakSet(),
+    safeHTML: () => fragment,
+    document: { createTextNode: (value) => ({ nodeType: 3, textContent: value }) }
+  });
+  vm.runInContext(`${functionSource('safeHTMLSingleElement')}\n${functionSource('appendSafeHTMLValue')}`, context);
+
+  vm.runInContext(`const node=safeHTMLSingleElement(['<button>', '</button>'], 'label');
+    node.dataset.id='barber-1'; node.classList.toggle('selected', true);
+    appendSafeHTMLValue({ append(value) { globalThis.inserted=value; } }, node);`, context);
+
+  assert.strictEqual(context.inserted, element);
+  assert.equal(element.dataset.id, 'barber-1');
+  assert.deepEqual(element.toggled, ['selected', true]);
+
+  context.safeHTML = () => ({ childNodes: [], firstChild: null });
+  assert.throws(() => vm.runInContext("safeHTMLSingleElement(['<div></div>'])", context), /exatamente um elemento/);
+});
+
+test('dashboard and barber startup use safe single elements wherever they mutate element state', () => {
+  const render = functionSource('render');
+  const ipad = functionSource('renderIpad');
+  const cash = functionSource('renderCash');
+
+  assert.match(render, /renderIpad\(\);renderDashboard\(\)/);
+  assert.match(ipad, /safeHTMLSingleElement`<button class="card"/);
+  assert.match(ipad, /safeHTMLSingleElement`<div class="card select-card"/);
+  assert.match(cash, /safeHTMLSingleElement`<button type="button" class="card cash-filter-card"/);
+  assert.match(html, /navInit\(\);render\(\);applyHostMode\(\);/);
+  assert.match(html, /case 'nav': if\(page==='ipad'\)openBarberPage\(\)/);
+});
+
 test('barber area opens the shared app without serializing current DOM as HTML', () => {
   assert.match(html, /new URLSearchParams\(window\.location\.search\)\.get\('barber'\)==='1'/);
   assert.match(html, /url\.searchParams\.set\('barber','1'\)/);
