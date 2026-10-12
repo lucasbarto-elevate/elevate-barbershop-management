@@ -470,7 +470,6 @@ async function loadRemote(force=false){
    remoteLoaded=true;
    backendOnline=true;
    localStorage.setItem(key,JSON.stringify(db));
-   if(staleCatalogOnly){catalogDirty=false;localStorage.removeItem(catalogSyncKey);}
    console.info('[Elevate sync] remote data loaded',{version:remoteVersion,entries:db.entries.length});
    render();updateConnectionStatus();return true;
  }catch(e){
