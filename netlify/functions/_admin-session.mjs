@@ -172,6 +172,32 @@ async function readSession(request, store, config, now) {
   return { sessionId, sessionKey, record };
 }
 
+/**
+ * Build a server-side admin-session resolver for protected Functions.
+ * The returned principal is created only after validating the existing opaque
+ * HttpOnly session cookie against the strongly-consistent session store.
+ * Its CSRF value is internal to the Function and must never be serialized.
+ */
+export function createAdminSessionResolver({ env, sessionStore, now = () => Date.now() } = {}) {
+  if (!env || typeof env !== 'object' || !sessionStore ||
+      typeof sessionStore.get !== 'function' || typeof sessionStore.delete !== 'function' ||
+      typeof now !== 'function') {
+    throw new TypeError('Admin session resolver dependencies are required.');
+  }
+
+  return async function resolveAdminSession(request) {
+    const config = readConfig(env);
+    const active = await readSession(request, sessionStore, config, now());
+    if (!active) return null;
+    return Object.freeze({
+      subjectId: 'admin',
+      role: 'admin',
+      csrfToken: active.record.csrfToken,
+      csrfCookieName: ADMIN_CSRF_COOKIE
+    });
+  };
+}
+
 function validateMutation(request, config, cookies, csrfToken = null) {
   if (!originIsValid(request, config)) throw authError(403, 'origin_rejected', 'Pedido não autorizado.');
   if (!csrfIsValid(request, cookies, csrfToken)) throw authError(403, 'csrf_rejected', 'Pedido não autorizado.');
