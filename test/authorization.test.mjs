@@ -26,11 +26,13 @@ const deviceIdentity = Object.freeze({
   subjectId: 'synthetic-device-session-subject',
   role: AUTH_ROLES.BARBER_DEVICE,
   deviceId: 'synthetic-ipad-device-001',
+  generation: 1,
   csrfToken: TEST_CSRF
 });
 const activeDevice = Object.freeze({
   subjectId: deviceIdentity.subjectId,
   deviceId: deviceIdentity.deviceId,
+  generation: 1,
   status: 'active'
 });
 
@@ -203,6 +205,22 @@ test('dispositivo só é aceite com sessão verificada e registo ativo correspon
   await expectFailure(revoked.authorizer.requireDevice(new Request(`${ORIGIN}/api/barber/sales`)), {
     status: 403,
     code: 'device_revoked'
+  });
+});
+
+test('geração antiga ou inválida do dispositivo é recusada mesmo com ID e papel corretos', async () => {
+  const stalePrincipal = { ...deviceIdentity, generation: 4 };
+  const staleRecord = { ...activeDevice, generation: 5 };
+  const stale = createFixture({ device: stalePrincipal, record: staleRecord });
+  await expectFailure(stale.authorizer.requireDevice(new Request(`${ORIGIN}/api/barber/sales`)), {
+    status: 403,
+    code: 'device_not_authorized'
+  });
+
+  const malformed = createFixture({ device: { ...deviceIdentity, generation: Number.MAX_SAFE_INTEGER + 1 } });
+  await expectFailure(malformed.authorizer.requireDevice(new Request(`${ORIGIN}/api/barber/sales`)), {
+    status: 403,
+    code: 'device_not_authorized'
   });
 });
 

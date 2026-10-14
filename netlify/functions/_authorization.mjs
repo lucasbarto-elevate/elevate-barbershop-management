@@ -119,7 +119,8 @@ export function createAuthorizer({ resolveAdminSession, resolveDeviceSession, fi
     }
     if (!deviceSession) deny(401, 'unauthenticated', 'Autenticação necessária.');
     normalizePrincipal(deviceSession, AUTH_ROLES.BARBER_DEVICE);
-    if (typeof deviceSession.deviceId !== 'string' || !deviceSession.deviceId.trim()) {
+    if (typeof deviceSession.deviceId !== 'string' || !deviceSession.deviceId.trim() ||
+        !Number.isSafeInteger(deviceSession.generation) || deviceSession.generation < 1) {
       deny(403, 'device_not_authorized', 'Este dispositivo não está autorizado.');
     }
 
@@ -129,7 +130,8 @@ export function createAuthorizer({ resolveAdminSession, resolveDeviceSession, fi
     } catch {
       deny(503, 'device_registry_unavailable', 'Não foi possível verificar o dispositivo.');
     }
-    if (!record || record.subjectId !== deviceSession.subjectId || record.deviceId !== deviceSession.deviceId) {
+    if (!record || record.subjectId !== deviceSession.subjectId || record.deviceId !== deviceSession.deviceId ||
+        !Number.isSafeInteger(record.generation) || record.generation !== deviceSession.generation) {
       deny(403, 'device_not_authorized', 'Este dispositivo não está autorizado.');
     }
     if (record.status !== 'active') deny(403, 'device_revoked', 'Este dispositivo está revogado ou inativo.');
