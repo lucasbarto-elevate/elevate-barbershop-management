@@ -28,12 +28,19 @@ class MemoryCASStore {
   failWrite = false;
   throwBeforeWrite = false;
   throwAfterWrite = false;
+  returnFalseAfterWrite = false;
+  failReadAfterFalse = false;
+  failNextRead = false;
   writeWithoutEtag = false;
   reads = [];
   writes = [];
 
   async getWithMetadata(key, options) {
     this.reads.push({ key, options });
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      throw new Error('synthetic confirmation read failure');
+    }
     if (this.failRead) throw new Error('synthetic storage failure with secret-like marker');
     if (!this.record) return null;
     return structuredClone(this.record);
@@ -55,6 +62,11 @@ class MemoryCASStore {
     }
     const etag = `"device-etag-${this.revision}"`;
     this.record = { data: structuredClone(value), etag };
+    if (this.returnFalseAfterWrite) {
+      this.returnFalseAfterWrite = false;
+      if (this.failReadAfterFalse) this.failNextRead = true;
+      return { modified: false };
+    }
     if (this.throwAfterWrite) {
       this.throwAfterWrite = false;
       throw new Error('synthetic network failure after commit');
@@ -101,6 +113,12 @@ function createFixture({ store = new MemoryCASStore(), clock = () => 1_800_000_0
     randomDeviceId: () => `synthetic-ipad-${++deviceCounter}`
   });
   return { store, manager };
+}
+
+function assertStrongReadsSince(store, startIndex) {
+  const reads = store.reads.slice(startIndex);
+  assert.ok(reads.length > 0, 'expected a store read');
+  assert.ok(reads.every(read => read.options?.consistency === 'strong'), 'every relevant read must request strong consistency');
 }
 
 function cookieRequest(session, { csrf = session.csrfToken, overrideSession = session.sessionId, origin = ORIGIN } = {}) {
@@ -365,6 +383,113 @@ test('falha de rede após commit confirma o estado; falha antes do commit não e
   const retry = await uncommitted.manager.activate({ expectedGeneration: 0 });
   assert.ok(retry.sessionId);
   assert.equal(uncommittedStore.record.data.status, 'active');
+});
+
+test('modified:false após ativação persistida só emite sessão após confirmar o registo completo', async () => {
+  const store = new MemoryCASStore();
+  store.returnFalseAfterWrite = true;
+  const { manager } = createFixture({ store });
+  const readsBefore = store.reads.length;
+
+  const session = await manager.activate({ expectedGeneration: 0 });
+
+  assert.equal(store.record.data.status, 'active');
+  assert.equal(store.record.data.generation, session.generation);
+  assert.equal(store.record.data.deviceId, session.deviceId);
+  assert.equal(store.record.data.sessionHash, createHash('sha256').update(session.sessionId).digest('hex'));
+  assert.equal(store.record.data.csrfHash, createHash('sha256').update(session.csrfToken).digest('hex'));
+  assert.ok(store.reads.length >= 2, 'must strongly read back after modified:false');
+  assertStrongReadsSince(store, readsBefore);
+  assert.equal((await manager.resolveDeviceSession(cookieRequest(session))).deviceId, session.deviceId);
+});
+
+test('modified:false após substituição persistida confirma a geração e invalida a sessão anterior', async () => {
+  const store = new MemoryCASStore();
+  const { manager } = createFixture({ store });
+  const previous = await manager.activate({ expectedGeneration: 0 });
+  store.returnFalseAfterWrite = true;
+  const readsBefore = store.reads.length;
+
+  const replacement = await manager.activate({ replaceExisting: true, expectedGeneration: previous.generation });
+
+  assert.equal(store.record.data.status, 'active');
+  assert.equal(store.record.data.generation, replacement.generation);
+  assert.equal(store.record.data.deviceId, replacement.deviceId);
+  assert.equal(store.record.data.sessionHash, createHash('sha256').update(replacement.sessionId).digest('hex'));
+  assert.notEqual(store.record.data.sessionHash, createHash('sha256').update(previous.sessionId).digest('hex'));
+  assert.ok(store.reads.length >= 3, 'must strongly read back after modified:false');
+  assertStrongReadsSince(store, readsBefore);
+  assert.equal(await manager.resolveDeviceSession(cookieRequest(previous)), null);
+  assert.equal((await manager.resolveDeviceSession(cookieRequest(replacement))).deviceId, replacement.deviceId);
+});
+
+test('modified:false após revogação persistida confirma o estado revogado completo', async () => {
+  const store = new MemoryCASStore();
+  const { manager } = createFixture({ store });
+  const session = await manager.activate({ expectedGeneration: 0 });
+  store.returnFalseAfterWrite = true;
+  const readsBefore = store.reads.length;
+
+  const result = await manager.revoke({ expectedGeneration: session.generation });
+
+  assert.equal(result.revoked, true);
+  assert.equal(store.record.data.status, 'revoked');
+  assert.equal(store.record.data.generation, result.generation);
+  assert.equal(store.record.data.sessionHash, null);
+  assert.equal(store.record.data.csrfHash, null);
+  assert.ok(store.reads.length >= 2, 'must strongly read back after modified:false');
+  assertStrongReadsSince(store, readsBefore);
+  assert.equal(await manager.resolveDeviceSession(cookieRequest(session)), null);
+});
+
+test('modified:false sem confirmação exata nunca emite sessão nem sobrescreve estado concorrente', async () => {
+  const store = new MemoryCASStore();
+  const { manager } = createFixture({ store });
+  const existing = await manager.activate({ expectedGeneration: 0 });
+  const before = structuredClone(store.record);
+  const competingState = {
+    ...before.data,
+    generation: before.data.generation + 1,
+    deviceId: 'synthetic-competing-ipad',
+    sessionHash: createHash('sha256').update('synthetic-competing-session').digest('hex'),
+    csrfHash: createHash('sha256').update('synthetic-competing-csrf').digest('hex')
+  };
+  const writesBefore = store.writes.length;
+  const readsBefore = store.reads.length;
+  store.setJSON = async function (key, value, options = {}) {
+    this.writes.push({ key, options: { ...options } });
+    this.record = { data: structuredClone(competingState), etag: '"competitor-etag"' };
+    return { modified: false };
+  };
+
+  await assert.rejects(
+    manager.activate({ replaceExisting: true, expectedGeneration: existing.generation }),
+    error => error.code === 'device_state_changed'
+  );
+  assert.deepEqual(store.record.data, competingState);
+  assert.equal(store.record.etag, '"competitor-etag"');
+  assert.equal(store.writes.length, writesBefore + 1, 'must not retry or overwrite the concurrent state');
+  assertStrongReadsSince(store, readsBefore);
+});
+
+test('modified:false com falha na leitura de confirmação falha fechado', async () => {
+  const store = new MemoryCASStore();
+  store.returnFalseAfterWrite = true;
+  store.failReadAfterFalse = true;
+  const { manager } = createFixture({ store });
+  const readsBefore = store.reads.length;
+  let error;
+
+  try { await manager.activate({ expectedGeneration: 0 }); } catch (caught) { error = caught; }
+
+  assert.equal(error.code, 'device_store_unavailable');
+  assert.equal(store.record.data.status, 'active', 'the committed but unconfirmed state is not rewritten');
+  assert.equal(store.writes.length, 1, 'must not retry an ambiguous conditional write');
+  assert.ok(store.reads.length >= 2, 'must attempt a strong confirmation read');
+  assertStrongReadsSince(store, readsBefore);
+  const response = deviceSessionErrorResponse(error);
+  const body = await response.text();
+  assert.doesNotMatch(body, /sessionId|csrfToken|sessionHash|csrfHash/);
 });
 
 test('revogação durante operação já autorizada não cancela escrita em curso; nova autorização é recusada', async () => {

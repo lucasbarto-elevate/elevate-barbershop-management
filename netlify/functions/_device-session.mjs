@@ -86,7 +86,7 @@ async function persistCAS(store, observed, nextState) {
     return confirmConditionalWrite(store, nextState);
   }
 
-  if (result?.modified === false) fail(409, 'device_state_changed', 'O estado do dispositivo mudou; atualize e tente novamente.');
+  if (result?.modified === false) return confirmConditionalWrite(store, nextState);
   if (result?.modified !== true) fail(503, 'device_store_unavailable', 'Não foi possível guardar a autorização do dispositivo.');
   if (safeEtag(result.etag)) return result.etag;
 
