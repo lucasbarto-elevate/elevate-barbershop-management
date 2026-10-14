@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none';">
+  <meta name="theme-color" content="#111111">
+  <title>Login administrativo · Elevate</title>
+  <link rel="stylesheet" href="/admin-login.css">
+  <script type="module" src="/admin-login.js"></script>
+</head>
+<body>
+  <main class="login-shell" id="admin-login-root">
+    <section class="login-card" aria-labelledby="page-title">
+      <a class="brand" href="/" aria-label="Elevate Barbershop">
+        <span class="brand-mark" aria-hidden="true">E</span>
+        <span>ELEVATE <small>BARBERSHOP</small></span>
+      </a>
+      <p class="eyebrow">Acesso administrativo</p>
+      <h1 id="page-title">Entrar</h1>
+      <p class="intro">Inicie sessão para validar a autenticação administrativa.</p>
+
+      <p id="session-status" class="status" role="status" aria-live="polite">A verificar sessão…</p>
+      <p id="feedback" class="feedback" role="status" aria-live="polite" hidden></p>
+
+      <form id="login-form" autocomplete="on" hidden>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" inputmode="email" required maxlength="254">
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <button id="login-button" class="primary" type="submit">Iniciar sessão</button>
+      </form>
+
+      <button id="logout-button" class="secondary" type="button" hidden>Terminar sessão</button>
+
+      <aside class="notice">
+        Esta página valida apenas a sessão administrativa. O Dashboard, a Área dos Barbeiros e as APIs de negócio ainda não estão protegidos por esta autenticação.
+      </aside>
+    </section>
+    <footer>Elevate Barbershop · Acesso de validação</footer>
+  </main>
+</body>
+</html>
