@@ -7,12 +7,6 @@
 [functions."backup-retention"]
   schedule = "0 3 * * *"
 
-[functions."initialize-catalog-staging-now"]
-  schedule = "0 0 29 2 *"
-
-[functions."diagnose-staging-db-now"]
-  schedule = "0 0 29 2 *"
-
 [[redirects]]
   from = "/api/data"
   to = "/.netlify/functions/data"
