@@ -2,11 +2,15 @@ import { getStore } from '@netlify/blobs';
 import { seed } from './_seed.mjs';
 import { STORE_NAMES } from './_store-names.mjs';
 
-const store = getStore({ name:STORE_NAMES.primary, consistency:'strong' });
 const CATALOG_KEY='catalog';
 const LEGACY_KEY='database';
 const ENTRY_PREFIX='entries/';
 const VERSION_KEY='sync-version';
+let defaultStore;
+
+function getDefaultStore(){
+  return defaultStore ||= getStore({ name:STORE_NAMES.primary, consistency:'strong' });
+}
 
 function cloneSeed(){ return structuredClone(seed); }
 function catalogFromSource(source){
@@ -36,13 +40,14 @@ async function readEntries(dataStore){
   return rows.filter(Boolean).sort((a,b)=>String((b.date||'')+(b.time||'')).localeCompare(String((a.date||'')+(a.time||''))));
 }
 
-export function createDataHandler(dataStore = store){
+export function createDataHandler(dataStore){
   return async ()=>{
     try{
+      const activeStore=dataStore||getDefaultStore();
       const [catalog,entries,version]=await Promise.all([
-        getCatalog(dataStore),
-        readEntries(dataStore),
-        dataStore.get(VERSION_KEY,{type:'json',consistency:'strong'})
+        getCatalog(activeStore),
+        readEntries(activeStore),
+        activeStore.get(VERSION_KEY,{type:'json',consistency:'strong'})
       ]);
       return Response.json({...catalog,entries,version:version?.version||0,ok:true},{headers:{'Cache-Control':'no-store'}});
     }catch(err){

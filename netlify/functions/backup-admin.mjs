@@ -7,37 +7,45 @@ import { assertCatalogInitializationEnabled, initializeCatalog } from './_initia
 import { seed } from './_seed.mjs';
 import { IS_DEFAULT_PRODUCTION_CONFIG } from './_store-names.mjs';
 
-export default async req => {
+export function createBackupAdminHandler({
+  env = process.env,
+  getStoreImpl = getStore,
+  isDefaultProductionConfig = IS_DEFAULT_PRODUCTION_CONFIG,
+  seedCatalog = seed
+} = {}) {
+  return async req => {
   if (req.method !== 'POST') return Response.json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   let body;
   try { body = await req.json(); } catch { return Response.json({ ok: false, error: 'JSON inválido.' }, { status: 400 }); }
-  const readToken = process.env.BACKUP_READ_TOKEN;
-  const restoreToken = process.env.BACKUP_RESTORE_TOKEN;
+  const readToken = env.BACKUP_READ_TOKEN;
+  const restoreToken = env.BACKUP_RESTORE_TOKEN;
   if (!readToken || !restoreToken || readToken === restoreToken) {
     return Response.json({ ok: false, error: 'Configuração administrativa inválida.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
   const restoreAction = ['restore', 'recover', 'initialize-catalog'].includes(body?.action);
   const secret = restoreAction ? restoreToken : readToken;
   if (!hasAdminAuthorization(req.headers.get('authorization'), secret)) return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
+
+  if (body.action === 'initialize-catalog') {
+    try {
+      assertCatalogInitializationEnabled({
+        isDefaultProductionConfig,
+        allowFlag: env.BACKUP_ALLOW_CATALOG_INITIALIZATION
+      });
+    } catch (error) {
+      return Response.json({ ok: false, error: error.message }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+    }
+  }
+
   try {
-    const primary = getStore({ name: PRIMARY_STORE_NAME, consistency: 'strong' });
-    const backups = getStore({ name: BACKUP_STORE_NAME, consistency: 'strong' });
-    const control = getStore({ name: CONTROL_STORE_NAME, consistency: 'strong' });
+    const primary = getStoreImpl({ name: PRIMARY_STORE_NAME, consistency: 'strong' });
+    const backups = getStoreImpl({ name: BACKUP_STORE_NAME, consistency: 'strong' });
+    const control = getStoreImpl({ name: CONTROL_STORE_NAME, consistency: 'strong' });
     let result;
     if (body.action === 'list') result = await listBackups(backups);
     else if (body.action === 'preview') result = await createRestorePreview({ primary, backups, control, backupKey: body.backupKey });
     else if (body.action === 'restore') result = await applyRestore({ primary, backups, control, preview: body.preview, confirmation: body.confirmation });
-    else if (body.action === 'initialize-catalog') {
-      try {
-        assertCatalogInitializationEnabled({
-          isDefaultProductionConfig: IS_DEFAULT_PRODUCTION_CONFIG,
-          allowFlag: process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION
-        });
-      } catch (error) {
-        return Response.json({ ok: false, error: error.message }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
-      }
-      result = await initializeCatalog({ primary, control, seedCatalog: seed });
-    }
+    else if (body.action === 'initialize-catalog') result = await initializeCatalog({ primary, control, seedCatalog });
     else if (body.action === 'recovery-status') result = (await readRecoveryState(control)).value || { required: false };
     else if (body.action === 'recovery-preview') {
       const recovery = (await readRecoveryState(control)).value;
@@ -95,4 +103,7 @@ export default async req => {
     console.error('[backup-admin] operation failed', error);
     return Response.json({ ok: false, error: String(error?.message || error), retryable: error?.retryable === true }, { status, headers: { 'Cache-Control': 'no-store' } });
   }
-};
+  };
+}
+
+export default createBackupAdminHandler();

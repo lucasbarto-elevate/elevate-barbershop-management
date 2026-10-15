@@ -1,11 +1,15 @@
 import { getStore } from '@netlify/blobs';
 import { STORE_NAMES } from './_store-names.mjs';
-const store = getStore({ name:STORE_NAMES.primary, consistency:'strong' });
 const VERSION_KEY='sync-version';
-export function createVersionHandler(versionStore = store){
+let defaultStore;
+function getDefaultStore(){
+  return defaultStore ||= getStore({ name:STORE_NAMES.primary, consistency:'strong' });
+}
+export function createVersionHandler(versionStore){
   return async function(){
     try{
-      const state=await versionStore.get(VERSION_KEY,{type:'json',consistency:'strong'});
+      const activeStore=versionStore||getDefaultStore();
+      const state=await activeStore.get(VERSION_KEY,{type:'json',consistency:'strong'});
       return Response.json({ok:true,...(state||{version:0,updatedAt:null})},{headers:{'Cache-Control':'no-store'}});
     }catch(err){
       return Response.json({ok:false,error:String(err?.message||err)},{status:503,headers:{'Cache-Control':'no-store'}});

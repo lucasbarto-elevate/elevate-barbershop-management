@@ -7,7 +7,7 @@ import {
 } from '../netlify/functions/_backup.mjs';
 import { createSyncHandler } from '../netlify/functions/sync.mjs';
 import { hasAdminAuthorization } from '../netlify/functions/_admin-auth.mjs';
-import adminHandler from '../netlify/functions/backup-admin.mjs';
+import { createBackupAdminHandler } from '../netlify/functions/backup-admin.mjs';
 import { createDataHandler } from '../netlify/functions/data.mjs';
 import { createVersionHandler } from '../netlify/functions/version.mjs';
 import { checksumSnapshot } from '../netlify/functions/_backup.mjs';
@@ -215,29 +215,54 @@ test('initializer refuses partial catalog, legacy data, or existing entries with
   }
 });
 
-test('catalog initialization endpoint requires explicit staging arming and restore authorization', async () => {
-  const oldRead = process.env.BACKUP_READ_TOKEN;
-  const oldRestore = process.env.BACKUP_RESTORE_TOKEN;
-  const oldAllow = process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION;
-  process.env.BACKUP_READ_TOKEN = 'read-test-token';
-  process.env.BACKUP_RESTORE_TOKEN = 'restore-test-token';
-  process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION = 'true';
-  try {
-    const readResponse = await adminHandler(new Request('https://example.test/api/backup-admin', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer read-test-token' },
-      body: JSON.stringify({ action: 'initialize-catalog' })
-    }));
-    assert.equal(readResponse.status, 401);
-    const response = await adminHandler(new Request('https://example.test/api/backup-admin', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer restore-test-token' },
-      body: JSON.stringify({ action: 'initialize-catalog' })
-    }));
-    assert.equal(response.status, 403); // The test module uses production defaults.
-  } finally {
-    if (oldRead === undefined) delete process.env.BACKUP_READ_TOKEN; else process.env.BACKUP_READ_TOKEN = oldRead;
-    if (oldRestore === undefined) delete process.env.BACKUP_RESTORE_TOKEN; else process.env.BACKUP_RESTORE_TOKEN = oldRestore;
-    if (oldAllow === undefined) delete process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION; else process.env.BACKUP_ALLOW_CATALOG_INITIALIZATION = oldAllow;
-  }
+test('catalog initialization rejects invalid authorization and forbidden configuration before creating stores', async () => {
+  let storeCalls = 0;
+  const handler = createBackupAdminHandler({
+    env: {
+      BACKUP_READ_TOKEN: 'synthetic-read-token',
+      BACKUP_RESTORE_TOKEN: 'synthetic-restore-token',
+      BACKUP_ALLOW_CATALOG_INITIALIZATION: 'true'
+    },
+    isDefaultProductionConfig: true,
+    getStoreImpl: () => { storeCalls++; throw new Error('store adapter must not be called'); }
+  });
+  const request = token => new Request('https://example.test/api/backup-admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action: 'initialize-catalog' })
+  });
+
+  assert.equal((await handler(request('synthetic-read-token'))).status, 401);
+  assert.equal(storeCalls, 0);
+  assert.equal((await handler(request('synthetic-restore-token'))).status, 403);
+  assert.equal(storeCalls, 0);
+});
+
+test('authorized catalog initialization uses only injected synthetic configuration and FakeStores', async () => {
+  const stores = [new FakeStore(), new FakeStore(), new FakeStore()];
+  const requestedStores = [];
+  const handler = createBackupAdminHandler({
+    env: {
+      BACKUP_READ_TOKEN: 'synthetic-read-token',
+      BACKUP_RESTORE_TOKEN: 'synthetic-restore-token',
+      BACKUP_ALLOW_CATALOG_INITIALIZATION: 'true'
+    },
+    isDefaultProductionConfig: false,
+    getStoreImpl: options => {
+      requestedStores.push(options);
+      return stores[requestedStores.length - 1];
+    },
+    seedCatalog: makeTestCatalog()
+  });
+  const response = await handler(new Request('https://example.test/api/backup-admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer synthetic-restore-token' },
+    body: JSON.stringify({ action: 'initialize-catalog' })
+  }));
+
+  assert.equal(response.status, 200);
+  assert.equal(requestedStores.length, 3);
+  assert.deepEqual(await stores[0].get('catalog'), makeTestCatalog());
 });
 
 test('catalog initialization requires staging store overrides and the temporary arming flag', () => {
@@ -357,22 +382,17 @@ test('admin authorization rejects missing/wrong tokens and accepts exact bearer 
 });
 
 test('administrative endpoint rejects invalid authorization before accessing stores', async () => {
-  const oldRead = process.env.BACKUP_READ_TOKEN;
-  const oldRestore = process.env.BACKUP_RESTORE_TOKEN;
-  process.env.BACKUP_READ_TOKEN = 'expected-token';
-  process.env.BACKUP_RESTORE_TOKEN = 'different-token';
-  try {
-    const response = await adminHandler(new Request('https://example.test/api/backup-admin', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer wrong-token' },
-      body: JSON.stringify({ action: 'list' })
-    }));
-    assert.equal(response.status, 401);
-  } finally {
-    if (oldRead === undefined) delete process.env.BACKUP_READ_TOKEN;
-    else process.env.BACKUP_READ_TOKEN = oldRead;
-    if (oldRestore === undefined) delete process.env.BACKUP_RESTORE_TOKEN;
-    else process.env.BACKUP_RESTORE_TOKEN = oldRestore;
-  }
+  let storeCalls = 0;
+  const handler = createBackupAdminHandler({
+    env: { BACKUP_READ_TOKEN: 'synthetic-expected-token', BACKUP_RESTORE_TOKEN: 'synthetic-restore-token' },
+    getStoreImpl: () => { storeCalls++; throw new Error('store adapter must not be called'); }
+  });
+  const response = await handler(new Request('https://example.test/api/backup-admin', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer synthetic-wrong-token' },
+    body: JSON.stringify({ action: 'list' })
+  }));
+  assert.equal(response.status, 401);
+  assert.equal(storeCalls, 0);
 });
 
 test('sync preserves entry create/edit/delete, stock deltas, and monotonic version', async () => {
@@ -480,6 +500,37 @@ test('data and version GETs remain read-only during recovery, including absent k
   assert.equal(emptyVersion.calls.delete, 0);
 });
 
+test('data and version modules import without Netlify environment and injected FakeStores stay local', async () => {
+  const removed = Object.entries(process.env).filter(([key]) => /NETLIFY|BLOBS/i.test(key));
+  for (const [key] of removed) delete process.env[key];
+  try {
+    const query = `?isolated-import=${Date.now()}`;
+    const dataModule = await import(`../netlify/functions/data.mjs${query}`);
+    const versionModule = await import(`../netlify/functions/version.mjs${query}`);
+    assert.equal(typeof dataModule.createDataHandler, 'function');
+    assert.equal(typeof versionModule.createVersionHandler, 'function');
+
+    const dataStore = new FakeStore({ catalog: makeTestCatalog() });
+    const dataResponse = await dataModule.createDataHandler(dataStore)();
+    const data = await dataResponse.json();
+    assert.equal(dataResponse.status, 200);
+    assert.equal(data.ok, true);
+    assert.deepEqual(data.entries, []);
+    assert.equal(dataStore.calls.setJSON, 0);
+    assert.equal(dataStore.calls.delete, 0);
+
+    const versionStore = new FakeStore();
+    const versionResponse = await versionModule.createVersionHandler(versionStore)();
+    const version = await versionResponse.json();
+    assert.equal(versionResponse.status, 200);
+    assert.equal(version.version, 0);
+    assert.equal(versionStore.calls.setJSON, 0);
+    assert.equal(versionStore.calls.delete, 0);
+  } finally {
+    for (const [key, value] of removed) process.env[key] = value;
+  }
+});
+
 test('interrupted sync leaves recovery barrier and rejects every new mutator', async () => {
   const world = makeWorld();
   const backup = await createBackup(world);
@@ -580,20 +631,16 @@ test('restore rolls back after each individual delete/set failure', async t => {
 });
 
 test('admin tokens must be distinct; read and restore scopes cannot substitute', async () => {
-  const oldRead = process.env.BACKUP_READ_TOKEN, oldRestore = process.env.BACKUP_RESTORE_TOKEN;
   const call = async (read, restore, token, action) => {
-    if (read === undefined) delete process.env.BACKUP_READ_TOKEN; else process.env.BACKUP_READ_TOKEN = read;
-    if (restore === undefined) delete process.env.BACKUP_RESTORE_TOKEN; else process.env.BACKUP_RESTORE_TOKEN = restore;
-    return adminHandler(new Request('https://example.test/api/backup-admin', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ action }) }));
+    const handler = createBackupAdminHandler({
+      env: { BACKUP_READ_TOKEN: read, BACKUP_RESTORE_TOKEN: restore },
+      getStoreImpl: () => { throw new Error('authorization must reject before store access'); }
+    });
+    return handler(new Request('https://example.test/api/backup-admin', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ action }) }));
   };
-  try {
-    assert.equal((await call('read', 'restore', 'read', 'restore')).status, 401);
-    assert.equal((await call('read', 'restore', 'restore', 'list')).status, 401);
-    assert.equal((await call('same', 'same', 'same', 'list')).status, 503);
-    assert.equal((await call(undefined, 'restore', 'restore', 'restore')).status, 503);
-    assert.equal((await call('read', undefined, 'read', 'list')).status, 503);
-  } finally {
-    if (oldRead === undefined) delete process.env.BACKUP_READ_TOKEN; else process.env.BACKUP_READ_TOKEN = oldRead;
-    if (oldRestore === undefined) delete process.env.BACKUP_RESTORE_TOKEN; else process.env.BACKUP_RESTORE_TOKEN = oldRestore;
-  }
+  assert.equal((await call('synthetic-read', 'synthetic-restore', 'synthetic-read', 'restore')).status, 401);
+  assert.equal((await call('synthetic-read', 'synthetic-restore', 'synthetic-restore', 'list')).status, 401);
+  assert.equal((await call('synthetic-same', 'synthetic-same', 'synthetic-same', 'list')).status, 503);
+  assert.equal((await call(undefined, 'synthetic-restore', 'synthetic-restore', 'restore')).status, 503);
+  assert.equal((await call('synthetic-read', undefined, 'synthetic-read', 'list')).status, 503);
 });
